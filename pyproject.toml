@@ -30,7 +30,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/easytocloud/cloudX-proxy"
-Repository = "https://github.com/easytocloud/cloudX-proxy.git"
+Repository = "git+https://github.com/easytocloud/cloudX-proxy.git"
 Issues = "https://github.com/easytocloud/cloudX-proxy/issues"
 Changelog = "https://github.com/easytocloud/cloudX-proxy/blob/main/CHANGELOG.md"
 
@@ -39,7 +39,7 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-cloudx-proxy = "cloudx_proxy.cli:main"
+cloudx-proxy = "cloudx_proxy.cli:cli"
 
 [tool.setuptools_scm]
 write_to = "cloudx_proxy/_version.py"

@@ -43,81 +43,64 @@ The proxy also supports easytocloud's AWS profile organizer. If you use multiple
 
 ## Setup
 
-1. Deploy the cloudX-user stack in your AWS account to create the necessary IAM user
-2. Configure the 'vscode' AWS profile with the credentials from the cloudX-user stack
-3. Install uv if you haven't already:
-   ```bash
-   pip install uv
-   ```
-
-The `uvx` command, part of the uv package manager, makes running cloudX-proxy seamless. When you run `uvx cloudx-proxy`, it automatically:
-- Pulls the latest version from PyPI
-- Creates an isolated virtual environment
-- Installs all dependencies
-- Runs the code
-
-All of this happens in a single, fast operation without any manual setup required.
-
-## SSH Configuration
-
-### 1. Generate SSH Key Pair
-
-If you don't already have an SSH key pair for VSCode:
+cloudX-proxy now includes a setup command that automates the entire configuration process:
 
 ```bash
-# Create .ssh/vscode directory
-mkdir -p ~/.ssh/vscode
+# Basic setup with defaults (vscode profile and key)
+uvx cloudx-proxy setup
 
-# Generate key pair
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode/vscode
+# Setup with custom profile and key
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+
+# Setup with AWS environment
+uvx cloudx-proxy setup --aws-env prod
 ```
 
-### 2. Configure SSH
+The setup command will:
 
-#### Unix-like Systems (macOS/Linux)
+1. Configure AWS Profile:
+   - Creates/validates AWS profile with cloudX-{env}-{user} format
+   - Supports AWS environment directories via --aws-env
+   - Uses aws configure for credential input
 
-1. Create or edit `~/.ssh/config`:
-   ```bash
-   # Include VSCode-specific config
-   Include vscode/config
-   ```
+2. Manage SSH Keys:
+   - Creates new SSH key pair if needed
+   - Offers 1Password integration options:
+     * Using 1Password SSH agent
+     * Storing private key as 1Password document
 
-2. Create `~/.ssh/vscode/config`:
-   ```
-   Host cloudx-*
-       ProxyCommand uvx cloudx-proxy %h %p
-       User ec2-user
-       IdentityFile ~/.ssh/vscode/vscode
-       StrictHostKeyChecking no
-       UserKnownHostsFile /dev/null
+3. Configure SSH:
+   - Creates ~/.ssh/vscode/config with proper settings
+   - Sets up environment-specific configurations
+   - Configures ProxyCommand with all necessary parameters
+   - Ensures main ~/.ssh/config includes the configuration
 
-   # Example host configuration
-   Host cloudx-dev
-       HostName i-0123456789abcdef0  # Your EC2 instance ID
-   ```
+4. Verify Instance Setup:
+   - Checks instance setup status
+   - Offers to wait for setup completion
+   - Monitors setup progress
 
-#### Windows
+### Example SSH Configuration
 
-1. Create or edit `%USERPROFILE%\.ssh\config`:
-   ```
-   Include vscode/config
-   ```
+The setup command generates a configuration structure like this:
 
-2. Create `%USERPROFILE%\.ssh\vscode\config`:
-   ```
-   Host cloudx-*
-       ProxyCommand uvx cloudx-proxy %h %p
-       User ec2-user
-       IdentityFile %USERPROFILE%\.ssh\vscode\vscode
-       StrictHostKeyChecking no
-       UserKnownHostsFile /dev/null
+```
+# Base environment config (created once per environment)
+Host cloudx-{env}-*
+    User ec2-user
+    IdentityAgent ~/.1password/agent.sock  # If using 1Password
+    IdentityFile ~/.ssh/vscode/key.pub    # .pub for 1Password, no .pub otherwise
+    IdentitiesOnly yes                    # If using 1Password
+    ProxyCommand uvx cloudx-proxy connect %h %p --profile profile --aws-env env
 
-   # Example host configuration
-   Host cloudx-dev
-       HostName i-0123456789abcdef0  # Your EC2 instance ID
-   ```
+# Host entries (added for each instance)
+Host cloudx-{env}-hostname
+    HostName i-1234567890
+```
 
-### 3. VSCode Configuration
+When adding new instances to an existing environment, the setup command will only add the specific host entry, preserving the existing environment configuration.
+
+### VSCode Configuration
 
 1. Install the "Remote - SSH" extension in VSCode
 2. Configure VSCode settings:
@@ -133,23 +116,23 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode/vscode
 ### Command Line
 
 ```bash
-# Basic usage (uses default vscode profile, port 22, and eu-west-1 region)
-uvx cloudx-proxy i-0123456789abcdef0
+# Setup new environment and instance
+uvx cloudx-proxy setup --profile myprofile --aws-env prod
 
-# With custom port
-uvx cloudx-proxy i-0123456789abcdef0 2222
+# Add instance to existing environment
+uvx cloudx-proxy setup --profile myprofile --aws-env prod
 
-# With custom profile
-uvx cloudx-proxy i-0123456789abcdef0 --profile myprofile
+# Connect to instance
+uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env prod
 
-# With different region (overrides eu-west-1 default)
-uvx cloudx-proxy i-0123456789abcdef0 --region us-east-1
+# Connect with custom port
+uvx cloudx-proxy connect i-0123456789abcdef0 2222 --profile myprofile
 
-# With AWS profile organizer environment
-uvx cloudx-proxy i-0123456789abcdef0 --aws-env prod
+# Connect with different region
+uvx cloudx-proxy connect i-0123456789abcdef0 22 --region us-east-1
 
-# With custom SSH key
-uvx cloudx-proxy i-0123456789abcdef0 --key-path ~/.ssh/custom_key.pub
+# Connect with custom key
+uvx cloudx-proxy connect i-0123456789abcdef0 22 --key-path ~/.ssh/custom_key.pub
 ```
 
 ### VSCode
@@ -185,23 +168,35 @@ The AWS user/role needs these permissions:
 
 ## Troubleshooting
 
-1. **Connection Timeout**
+1. **Setup Issues**
+   - If AWS profile validation fails, ensure your user ARN matches the cloudX-{env}-{user} format
+   - For 1Password integration, ensure the CLI is installed and you're signed in
+   - Check that ~/.ssh/vscode directory has proper permissions (700)
+   - Verify main ~/.ssh/config is writable
+
+2. **Connection Timeout**
    - Ensure the instance has the SSM agent installed and running
    - Check that your AWS credentials have the required permissions
    - Verify the instance ID is correct
    - Increase the VSCode SSH timeout if needed
 
-2. **SSH Key Issues**
-   - Ensure the key pair exists in the correct location
+3. **SSH Key Issues**
+   - If using 1Password SSH agent, verify agent is running (~/.1password/agent.sock exists)
    - Check file permissions (600 for private key, 644 for public key)
    - Verify the public key is being successfully pushed to the instance
+   - For stored keys in 1Password, ensure you can access them via the CLI
 
-3. **AWS Configuration**
-   - Confirm AWS CLI is configured with valid credentials (default profile name is 'vscode')
+4. **AWS Configuration**
+   - Confirm AWS CLI is configured with valid credentials
    - Default region is eu-west-1 if not specified in profile or command line
    - If using AWS profile organizer, ensure your environment directory exists at `~/.aws/aws-envs/<environment>/`
    - Verify the Session Manager plugin is installed correctly
    - Check that the instance has the required IAM role for SSM
+
+5. **Instance Setup Status**
+   - If setup appears stuck, check /home/ec2-user/.install-running exists
+   - Verify /home/ec2-user/.install-done is created upon completion
+   - Check instance system logs for setup script errors
 
 ## License
 
