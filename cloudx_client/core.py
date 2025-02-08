@@ -108,6 +108,7 @@ class CloudXClient:
         The session manager plugin will automatically handle the data transfer.
         """
         import subprocess
+        import platform
         
         try:
             # Build environment with AWS credentials configuration
@@ -117,15 +118,23 @@ class CloudXClient:
             if 'AWS_SHARED_CREDENTIALS_FILE' in os.environ:
                 env['AWS_SHARED_CREDENTIALS_FILE'] = os.environ['AWS_SHARED_CREDENTIALS_FILE']
             
+            # Determine AWS CLI command based on platform
+            aws_cmd = 'aws.exe' if platform.system() == 'Windows' else 'aws'
+            
             # Use AWS CLI to start session, which properly handles stdin/stdout
-            subprocess.run([
-                'aws', 'ssm', 'start-session',
-                '--target', self.instance_id,
-                '--document-name', 'AWS-StartSSHSession',
-                '--parameters', f'portNumber={self.port}',
-                '--profile', self.profile,
-                '--region', self.session.region_name
-            ], env=env, check=True)
+            # shell=True on Windows to ensure proper PATH resolution
+            if platform.system() == 'Windows':
+                cmd = f'{aws_cmd} ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {self.session.region_name}'
+                subprocess.run(cmd, env=env, check=True, shell=True)
+            else:
+                subprocess.run([
+                    aws_cmd, 'ssm', 'start-session',
+                    '--target', self.instance_id,
+                    '--document-name', 'AWS-StartSSHSession',
+                    '--parameters', f'portNumber={self.port}',
+                    '--profile', self.profile,
+                    '--region', self.session.region_name
+                ], env=env, check=True)
         except subprocess.CalledProcessError as e:
             self.log(f"Error starting session: {e}")
             raise
