@@ -1,3 +1,10 @@
+## [2025.2.4](https://github.com/easytocloud/cloudX-client/compare/2025.2.3...2025.2.4) (2025-02-08)
+
+
+### Bug Fixes
+
+* proper stdin/stdout handling for SSH ProxyCommand ([760808c](https://github.com/easytocloud/cloudX-client/commit/760808c0498e865681795d5125b80c0808432ef3))
+
 ## [2025.2.3](https://github.com/easytocloud/cloudX-client/compare/2025.2.2...2025.2.3) (2025-02-08)
 
 
