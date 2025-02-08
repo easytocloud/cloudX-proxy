@@ -1,4 +1,4 @@
-# Contributing to cloudX-client
+# Contributing to cloudX-proxy
 
 ## Development Setup
 

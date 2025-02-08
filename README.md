@@ -1,10 +1,10 @@
-# cloudX-client
+# cloudX-proxy
 
-A cross-platform Python client for connecting VSCode to CloudX/Cloud9 EC2 instances via SSH over AWS Systems Manager Session Manager.
+A cross-platform SSH proxy command for connecting VSCode to CloudX/Cloud9 EC2 instances using AWS Systems Manager Session Manager.
 
 ## Overview
 
-cloudX-client enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
+cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
 
 - Automatic instance startup if stopped
 - SSH key distribution via EC2 Instance Connect
@@ -26,7 +26,7 @@ cloudX-client enables seamless SSH connections from VSCode to EC2 instances usin
 
 ## AWS Credentials Setup
 
-The client expects to find AWS credentials in a profile named 'vscode' by default. These credentials should be the Access Key and Secret Key that were created by deploying the cloudX-user stack in your AWS account. The cloudX-user stack creates an IAM user with the minimal permissions required for:
+The proxy expects to find AWS credentials in a profile named 'vscode' by default. These credentials should be the Access Key and Secret Key that were created by deploying the cloudX-user stack in your AWS account. The cloudX-user stack creates an IAM user with the minimal permissions required for:
 - Starting/stopping EC2 instances
 - Establishing SSM sessions
 - Pushing SSH keys via EC2 Instance Connect
@@ -39,7 +39,7 @@ Everytime the user connects to the instance, `ssostart` will authenticate the us
 
 This ensures you have the appropriate AWS access both for connecting to the instance and for working within it.
 
-The client also supports easytocloud's AWS profile organizer. If you use multiple AWS environments, you can store your AWS configuration and credentials in `~/.aws/aws-envs/<environment>` directories and use the `--aws-env` option to specify which environment to use.
+The proxy also supports easytocloud's AWS profile organizer. If you use multiple AWS environments, you can store your AWS configuration and credentials in `~/.aws/aws-envs/<environment>` directories and use the `--aws-env` option to specify which environment to use.
 
 ## Setup
 
@@ -50,7 +50,7 @@ The client also supports easytocloud's AWS profile organizer. If you use multipl
    pip install uv
    ```
 
-The `uvx` command, part of the uv package manager, makes running cloudx-client seamless. When you run `uvx cloudx-client`, it automatically:
+The `uvx` command, part of the uv package manager, makes running cloudX-proxy seamless. When you run `uvx cloudx-proxy`, it automatically:
 - Pulls the latest version from PyPI
 - Creates an isolated virtual environment
 - Installs all dependencies
@@ -85,7 +85,7 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode/vscode
 2. Create `~/.ssh/vscode/config`:
    ```
    Host cloudx-*
-       ProxyCommand uvx cloudx-client %h %p
+       ProxyCommand uvx cloudx-proxy %h %p
        User ec2-user
        IdentityFile ~/.ssh/vscode/vscode
        StrictHostKeyChecking no
@@ -106,7 +106,7 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode/vscode
 2. Create `%USERPROFILE%\.ssh\vscode\config`:
    ```
    Host cloudx-*
-       ProxyCommand uvx cloudx-client %h %p
+       ProxyCommand uvx cloudx-proxy %h %p
        User ec2-user
        IdentityFile %USERPROFILE%\.ssh\vscode\vscode
        StrictHostKeyChecking no
@@ -134,22 +134,22 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode/vscode
 
 ```bash
 # Basic usage (uses default vscode profile, port 22, and eu-west-1 region)
-uvx cloudx-client i-0123456789abcdef0
+uvx cloudx-proxy i-0123456789abcdef0
 
 # With custom port
-uvx cloudx-client i-0123456789abcdef0 2222
+uvx cloudx-proxy i-0123456789abcdef0 2222
 
 # With custom profile
-uvx cloudx-client i-0123456789abcdef0 --profile myprofile
+uvx cloudx-proxy i-0123456789abcdef0 --profile myprofile
 
 # With different region (overrides eu-west-1 default)
-uvx cloudx-client i-0123456789abcdef0 --region us-east-1
+uvx cloudx-proxy i-0123456789abcdef0 --region us-east-1
 
 # With AWS profile organizer environment
-uvx cloudx-client i-0123456789abcdef0 --aws-env prod
+uvx cloudx-proxy i-0123456789abcdef0 --aws-env prod
 
 # With custom SSH key
-uvx cloudx-client i-0123456789abcdef0 --key-path ~/.ssh/custom_key.pub
+uvx cloudx-proxy i-0123456789abcdef0 --key-path ~/.ssh/custom_key.pub
 ```
 
 ### VSCode
@@ -158,7 +158,7 @@ uvx cloudx-client i-0123456789abcdef0 --key-path ~/.ssh/custom_key.pub
 2. Select "SSH Targets" from the dropdown
 3. Your configured hosts will appear (e.g., cloudx-dev)
 4. Click the "+" icon next to a host to connect
-5. VSCode will handle the rest, using cloudX-client to establish the connection
+5. VSCode will handle the rest, using cloudX-proxy to establish the connection
 
 ## AWS Permissions
 

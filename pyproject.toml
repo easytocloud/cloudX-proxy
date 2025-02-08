@@ -1,7 +1,7 @@
 [project]
-name = "cloudx-client"
+name = "cloudx-proxy"
 dynamic = ["version"]
-description = "Client to connect VSCode with Cloud9/CloudX instance over ssh using Session Manager plugin"
+description = "SSH proxy command to connect VSCode with Cloud9/CloudX instance using AWS Systems Manager"
 authors = [
     {name = "easytocloud", email = "info@easytocloud.com"}
 ]
@@ -12,7 +12,7 @@ dependencies = [
 requires-python = ">=3.8"
 readme = "README.md"
 license = {file = "LICENSE"}
-keywords = ["aws", "vscode", "cloud9", "cloudX", "ssm", "ssh"]
+keywords = ["aws", "vscode", "cloud9", "cloudX", "ssm", "ssh", "proxy"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -29,19 +29,19 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/easytocloud/cloudx-client"
-Repository = "https://github.com/easytocloud/cloudx-client.git"
-Issues = "https://github.com/easytocloud/cloudx-client/issues"
-Changelog = "https://github.com/easytocloud/cloudx-client/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/easytocloud/cloudX-proxy"
+Repository = "https://github.com/easytocloud/cloudX-proxy.git"
+Issues = "https://github.com/easytocloud/cloudX-proxy/issues"
+Changelog = "https://github.com/easytocloud/cloudX-proxy/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-cloudx-client = "cloudx_client.cli:main"
+cloudx-proxy = "cloudx_proxy.cli:main"
 
 [tool.setuptools_scm]
-write_to = "cloudx_client/_version.py"
+write_to = "cloudx_proxy/_version.py"
 version_scheme = "post-release"
 local_scheme = "no-local-version"
