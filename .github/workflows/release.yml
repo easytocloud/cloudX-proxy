@@ -33,15 +33,34 @@ jobs:
         run: |
           npm install -g semantic-release @semantic-release/changelog @semantic-release/git
 
+      - name: Get Version
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(npx semantic-release --dry-run | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+          if [ -n "$version" ]; then
+            echo "new_release_version=$version" >> $GITHUB_OUTPUT
+            echo "Version to be released: $version"
+          else
+            echo "No new version to be released"
+            exit 0
+          fi
+
       - name: Create Release
+        if: steps.semantic.outputs.new_release_version != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
       - name: Build package
+        if: steps.semantic.outputs.new_release_version != ''
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.semantic.outputs.new_release_version }}
         run: python -m build
 
       - name: Publish to PyPI
+        if: steps.semantic.outputs.new_release_version != ''
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
