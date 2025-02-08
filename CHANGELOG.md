@@ -1,3 +1,10 @@
+## [2025.2.3](https://github.com/easytocloud/cloudX-client/compare/2025.2.2...2025.2.3) (2025-02-08)
+
+
+### Bug Fixes
+
+* add Windows compatibility for SSH ProxyCommand ([e0e798d](https://github.com/easytocloud/cloudX-client/commit/e0e798d16b64d59c3dfb3493d30b590019b25855))
+
 ## [2025.2.2](https://github.com/easytocloud/cloudX-client/compare/2025.2.1...2025.2.2) (2025-02-08)
 
 
