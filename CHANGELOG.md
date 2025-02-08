@@ -1,3 +1,19 @@
+# [2025.3.0](https://github.com/easytocloud/cloudX-proxy/compare/2025.2.4...2025.3.0) (2025-02-08)
+
+
+### Bug Fixes
+
+* set explicit repository URL in semantic-release config ([8b4f941](https://github.com/easytocloud/cloudX-proxy/commit/8b4f94194ce28a7f3830ef279d390dea4814251a))
+* update semantic-release config to ensure releases ([6c51d01](https://github.com/easytocloud/cloudX-proxy/commit/6c51d014438f035176ecf8171ff0ee0b21948f6e))
+
+
+### Features
+
+* force new release for cloudx-proxy ([3cf3996](https://github.com/easytocloud/cloudX-proxy/commit/3cf3996f59533012f64261b2f593927fee7855b3))
+* prepare initial release as cloudx-proxy ([986f1b7](https://github.com/easytocloud/cloudX-proxy/commit/986f1b7791ce4a6d213e743e5e2e902149639fdf))
+* rename package to cloudx-proxy for PyPI publishing ([b1ffcc6](https://github.com/easytocloud/cloudX-proxy/commit/b1ffcc62b10f259fb42fb10cb9b5ecc0acc48d1b))
+* trigger release with correct repository configuration ([45adbf1](https://github.com/easytocloud/cloudX-proxy/commit/45adbf13522f6352bb86fac8a9d51c4644892c1d))
+
 ## [2025.2.4](https://github.com/easytocloud/cloudX-client/compare/2025.2.3...2025.2.4) (2025-02-08)
 
 
