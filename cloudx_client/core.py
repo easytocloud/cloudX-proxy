@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from pathlib import Path
 import boto3
@@ -43,6 +44,10 @@ class CloudXClient:
             public_key_path = os.path.expanduser("~/.ssh/vscode/vscode.pub")
         self.public_key_path = Path(public_key_path)
 
+    def log(self, message: str) -> None:
+        """Log message to stderr to avoid interfering with SSH connection."""
+        print(message, file=sys.stderr)
+
     def get_instance_status(self) -> str:
         """Check if instance is online in SSM."""
         try:
@@ -61,7 +66,7 @@ class CloudXClient:
             self.ec2.start_instances(InstanceIds=[self.instance_id])
             return True
         except ClientError as e:
-            print(f"Error starting instance: {e}")
+            self.log(f"Error starting instance: {e}")
             return False
 
     def wait_for_instance(self, max_attempts: int = 30, delay: int = 3) -> bool:
@@ -93,7 +98,7 @@ class CloudXClient:
             )
             return True
         except (ClientError, FileNotFoundError) as e:
-            print(f"Error pushing SSH key: {e}")
+            self.log(f"Error pushing SSH key: {e}")
             return False
 
     def start_session(self) -> None:
@@ -105,7 +110,7 @@ class CloudXClient:
                 Parameters={'portNumber': [str(self.port)]}
             )
         except ClientError as e:
-            print(f"Error starting session: {e}")
+            self.log(f"Error starting session: {e}")
             raise
 
     def connect(self) -> bool:
@@ -118,19 +123,19 @@ class CloudXClient:
         status = self.get_instance_status()
         
         if status != 'Online':
-            print(f"Instance {self.instance_id} is {status}, starting...")
+            self.log(f"Instance {self.instance_id} is {status}, starting...")
             if not self.start_instance():
                 return False
             
-            print("Waiting for instance to come online...")
+            self.log("Waiting for instance to come online...")
             if not self.wait_for_instance():
-                print("Instance failed to come online")
+                self.log("Instance failed to come online")
                 return False
         
-        print("Pushing SSH public key...")
+        self.log("Pushing SSH public key...")
         if not self.push_ssh_key():
             return False
         
-        print("Starting SSM session...")
+        self.log("Starting SSM session...")
         self.start_session()
         return True

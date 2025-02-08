@@ -34,7 +34,7 @@ def main(instance_id: str, port: int, profile: str, region: str, key_path: str, 
             sys.exit(1)
             
     except Exception as e:
-        click.echo(f"Error: {str(e)}", err=True)
+        print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':
