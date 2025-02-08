@@ -1,3 +1,10 @@
+## [2025.2.2](https://github.com/easytocloud/cloudX-client/compare/2025.2.1...2025.2.2) (2025-02-08)
+
+
+### Bug Fixes
+
+* use AWS CLI for session start to handle SSH ProxyCommand data transfer ([49cb9c8](https://github.com/easytocloud/cloudX-client/commit/49cb9c86d3a4d25b893d8baea181df229ccabb0d))
+
 ## [2025.2.1](https://github.com/easytocloud/cloudX-client/compare/2025.2.0...2025.2.1) (2025-02-08)
 
 
