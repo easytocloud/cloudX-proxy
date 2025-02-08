@@ -1,6 +1,7 @@
 {
     "branches": ["main"],
     "tagFormat": "${version}",
+    "repositoryUrl": "https://github.com/easytocloud/cloudX-proxy.git",
     "plugins": [
         ["@semantic-release/commit-analyzer", {
             "preset": "angular",
