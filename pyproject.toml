@@ -1,0 +1,45 @@
+[project]
+name = "cloudx-client"
+dynamic = ["version"]
+description = "Client to connect VSCode with Cloud9/CloudX instance over ssh using Session Manager plugin"
+authors = [
+    {name = "easytocloud", email = "info@easytocloud.com"}
+]
+dependencies = [
+    "boto3>=1.34.0",
+    "click>=8.1.0",  # For better CLI argument handling than argparse
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["aws", "vscode", "cloud9", "cloudX", "ssm", "ssh"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: System :: Systems Administration",
+]
+
+[project.urls]
+Homepage = "https://github.com/easytocloud/cloudx-client"
+Repository = "https://github.com/easytocloud/cloudx-client.git"
+Issues = "https://github.com/easytocloud/cloudx-client/issues"
+Changelog = "https://github.com/easytocloud/cloudx-client/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+cloudx-client = "cloudx_client.cli:main"
+
+[tool.setuptools_scm]
+write_to = "cloudx_client/_version.py"

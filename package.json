@@ -1,0 +1,20 @@
+{
+  "name": "cloudx-client",
+  "version": "1.0.0",
+  "description": "Client to connect VSCode with Cloud9/CloudX instance over ssh using Session Manager plugin",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/easytocloud/cloudX-client.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/easytocloud/cloudX-client/issues"
+  },
+  "homepage": "https://github.com/easytocloud/cloudX-client#readme"
+}
