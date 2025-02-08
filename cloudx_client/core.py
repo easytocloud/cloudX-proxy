@@ -106,6 +106,11 @@ class CloudXClient:
         
         Uses AWS CLI directly to ensure proper stdin/stdout handling for SSH ProxyCommand.
         The session manager plugin will automatically handle the data transfer.
+        
+        When used as a ProxyCommand, we need to:
+        1. Pass through stdin/stdout directly to AWS CLI
+        2. Only use stderr for logging
+        3. Let the session manager plugin handle the actual data transfer
         """
         import subprocess
         import platform
@@ -121,20 +126,37 @@ class CloudXClient:
             # Determine AWS CLI command based on platform
             aws_cmd = 'aws.exe' if platform.system() == 'Windows' else 'aws'
             
-            # Use AWS CLI to start session, which properly handles stdin/stdout
-            # shell=True on Windows to ensure proper PATH resolution
-            if platform.system() == 'Windows':
-                cmd = f'{aws_cmd} ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {self.session.region_name}'
-                subprocess.run(cmd, env=env, check=True, shell=True)
-            else:
-                subprocess.run([
-                    aws_cmd, 'ssm', 'start-session',
-                    '--target', self.instance_id,
-                    '--document-name', 'AWS-StartSSHSession',
-                    '--parameters', f'portNumber={self.port}',
-                    '--profile', self.profile,
-                    '--region', self.session.region_name
-                ], env=env, check=True)
+            # Build command as list (works for both Windows and Unix)
+            cmd = [
+                aws_cmd, 'ssm', 'start-session',
+                '--target', self.instance_id,
+                '--document-name', 'AWS-StartSSHSession',
+                '--parameters', f'portNumber={self.port}',
+                '--profile', self.profile,
+                '--region', self.session.region_name
+            ]
+            
+            # Start AWS CLI process with direct stdin/stdout pass-through
+            process = subprocess.Popen(
+                cmd,
+                env=env,
+                stdin=sys.stdin,
+                stdout=sys.stdout,
+                stderr=subprocess.PIPE,  # Capture stderr for our logging
+                shell=platform.system() == 'Windows'  # shell=True only on Windows
+            )
+            
+            # Monitor stderr for logging while process runs
+            while True:
+                err_line = process.stderr.readline()
+                if not err_line and process.poll() is not None:
+                    break
+                if err_line:
+                    self.log(err_line.decode().strip())
+            
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd)
+            
         except subprocess.CalledProcessError as e:
             self.log(f"Error starting session: {e}")
             raise
