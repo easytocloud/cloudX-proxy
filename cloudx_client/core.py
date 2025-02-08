@@ -102,14 +102,31 @@ class CloudXClient:
             return False
 
     def start_session(self) -> None:
-        """Start SSM session with SSH port forwarding."""
+        """Start SSM session with SSH port forwarding.
+        
+        Uses AWS CLI directly to ensure proper stdin/stdout handling for SSH ProxyCommand.
+        The session manager plugin will automatically handle the data transfer.
+        """
+        import subprocess
+        
         try:
-            self.ssm.start_session(
-                Target=self.instance_id,
-                DocumentName='AWS-StartSSHSession',
-                Parameters={'portNumber': [str(self.port)]}
-            )
-        except ClientError as e:
+            # Build environment with AWS credentials configuration
+            env = os.environ.copy()
+            if 'AWS_CONFIG_FILE' in os.environ:
+                env['AWS_CONFIG_FILE'] = os.environ['AWS_CONFIG_FILE']
+            if 'AWS_SHARED_CREDENTIALS_FILE' in os.environ:
+                env['AWS_SHARED_CREDENTIALS_FILE'] = os.environ['AWS_SHARED_CREDENTIALS_FILE']
+            
+            # Use AWS CLI to start session, which properly handles stdin/stdout
+            subprocess.run([
+                'aws', 'ssm', 'start-session',
+                '--target', self.instance_id,
+                '--document-name', 'AWS-StartSSHSession',
+                '--parameters', f'portNumber={self.port}',
+                '--profile', self.profile,
+                '--region', self.session.region_name
+            ], env=env, check=True)
+        except subprocess.CalledProcessError as e:
             self.log(f"Error starting session: {e}")
             raise
 
