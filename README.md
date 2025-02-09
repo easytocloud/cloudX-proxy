@@ -113,27 +113,61 @@ When adding new instances to an existing environment, the setup command will onl
 
 ## Usage
 
-### Command Line
+### Command Line Options
 
+#### Setup Command
 ```bash
-# Setup new environment and instance
-uvx cloudx-proxy setup --profile myprofile --aws-env prod
-
-# Add instance to existing environment
-uvx cloudx-proxy setup --profile myprofile --aws-env prod
-
-# Connect to instance
-uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env prod
-
-# Connect with custom port
-uvx cloudx-proxy connect i-0123456789abcdef0 2222 --profile myprofile
-
-# Connect with different region
-uvx cloudx-proxy connect i-0123456789abcdef0 22 --region us-east-1
-
-# Connect with custom key
-uvx cloudx-proxy connect i-0123456789abcdef0 22 --key-path ~/.ssh/custom_key.pub
+uvx cloudx-proxy setup [OPTIONS]
 ```
+
+Options:
+- `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.
+- `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in ~/.ssh/vscode/{name}. This same name can be used in the connect command.
+- `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
+
+Example usage:
+```bash
+# Basic setup with defaults
+uvx cloudx-proxy setup
+
+# Setup with custom profile and key
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+
+# Setup with AWS environment
+uvx cloudx-proxy setup --profile myprofile --aws-env prod
+```
+
+#### Connect Command
+```bash
+uvx cloudx-proxy connect INSTANCE_ID [PORT] [OPTIONS]
+```
+
+Arguments:
+- `INSTANCE_ID`: The EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
+- `PORT` (default: 22): The port to forward for SSH connection
+
+Options:
+- `--profile` (default: vscode): AWS profile to use. Should match the profile used in setup.
+- `--ssh-key` (default: vscode): Name of the SSH key to use. Should match the key name used in setup.
+- `--region` (optional): AWS region to use. If not specified, uses the region from the AWS profile.
+- `--aws-env` (optional): AWS environment directory to use. Should match the environment used in setup.
+
+Example usage:
+```bash
+# Connect using defaults
+uvx cloudx-proxy connect i-0123456789abcdef0
+
+# Connect with custom profile and key
+uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --ssh-key mykey
+
+# Connect with custom port and region
+uvx cloudx-proxy connect i-0123456789abcdef0 2222 --region us-east-1
+
+# Connect with AWS environment
+uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env prod
+```
+
+Note: The connect command is typically used through the SSH ProxyCommand configuration set up by the setup command. You rarely need to run it directly unless testing the connection.
 
 ### VSCode
 
