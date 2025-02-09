@@ -43,6 +43,5 @@ cloudx-proxy = "cloudx_proxy.cli:cli"
 
 [tool.setuptools_scm]
 write_to = "cloudx_proxy/_version.py"
-version_scheme = "release-branch-semver"
+version_scheme = "semver"
 local_scheme = "no-local-version"
-tag_regex = "^(?P<prefix>v)?(?P<version>2025\\.(?P<minor>\\d+)\\.(?P<patch>\\d+))(?P<suffix>.*)?$"
