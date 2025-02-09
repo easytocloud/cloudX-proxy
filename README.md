@@ -13,16 +13,37 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
 
 ## Prerequisites
 
-1. **AWS CLI v2** - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-2. **AWS Session Manager Plugin** - [Installation Guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
-3. **OpenSSH Client**
+1. **AWS CLI v2** - Used to configure AWS profiles and credentials
+   - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+   - Required for `aws configure` during setup
+   - Handles AWS credentials and region configuration
+
+2. **AWS Session Manager Plugin** - Enables secure tunneling through AWS Systems Manager
+   - [Installation Guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+   - Provides the secure connection channel
+   - No need for public IP addresses or direct SSH access
+
+3. **OpenSSH Client** - Handles SSH key management and connections
    - Windows: [Microsoft's OpenSSH Installation Guide](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse?tabs=gui)
    - macOS/Linux: Usually pre-installed
-4. **uv** - Python package installer and resolver
+   - Manages SSH keys and configurations
+   - Provides the SSH client for VSCode Remote
+
+4. **uv** - Modern Python package installer and virtual environment manager
    ```bash
    pip install uv
    ```
-5. **VSCode with Remote SSH Extension** installed
+   The `uvx` command from uv automatically:
+   - Creates an isolated virtual environment for each package
+   - Downloads and installs the package and its dependencies
+   - Runs the package without explicit environment activation
+   
+   This means you can run cloudX-proxy directly with `uvx cloudx-proxy` without manually managing virtual environments or dependencies.
+
+5. **VSCode with Remote SSH Extension** - Your development environment
+   - Provides the integrated development environment
+   - Uses the SSH configuration to connect to instances
+   - Handles file synchronization and terminal sessions
 
 ## AWS Credentials Setup
 
@@ -31,19 +52,11 @@ The proxy expects to find AWS credentials in a profile named 'vscode' by default
 - Establishing SSM sessions
 - Pushing SSH keys via EC2 Instance Connect
 
-Once the SSH session is established, the user has to further configure the instance using `generate-sso-config` tool. This is a one-time setup unless the user's access to AWS accounts changes, in which case the user should re-run the `generate-sso-config` tool.
-
-It is recommended to use  --generate-directories and --use-ou-structure to create working directories for each account the user has access to.
-
-Everytime the user connects to the instance, `ssostart` will authenticate the user with AWS SSO and generate temporary credentials. 
-
-This ensures you have the appropriate AWS access both for connecting to the instance and for working within it.
-
-The proxy also supports easytocloud's AWS profile organizer. If you use multiple AWS environments, you can store your AWS configuration and credentials in `~/.aws/aws-envs/<environment>` directories and use the `--aws-env` option to specify which environment to use.
+The proxy supports easytocloud's AWS profile organizer for managing multiple AWS environments. You can store your AWS configuration and credentials in `~/.aws/aws-envs/<environment>` directories and use the `--aws-env` option to specify which environment to use.
 
 ## Setup
 
-cloudX-proxy now includes a setup command that automates the entire configuration process:
+cloudX-proxy includes a setup command that automates the entire configuration process:
 
 ```bash
 # Basic setup with defaults (vscode profile and key)
@@ -80,25 +93,23 @@ The setup command will:
    - Offers to wait for setup completion
    - Monitors setup progress
 
-### Example SSH Configuration
+### SSH Configuration
 
-The setup command generates a configuration structure like this:
+The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. It creates:
 
-```
-# Base environment config (created once per environment)
-Host cloudx-{env}-*
-    User ec2-user
-    IdentityAgent ~/.1password/agent.sock  # If using 1Password
-    IdentityFile ~/.ssh/vscode/key.pub    # .pub for 1Password, no .pub otherwise
-    IdentitiesOnly yes                    # If using 1Password
-    ProxyCommand uvx cloudx-proxy connect %h %p --profile profile --aws-env env
+1. A base configuration for each environment (cloudx-{env}-*) with:
+   - User and key settings
+   - 1Password integration if selected
+   - ProxyCommand with appropriate parameters
 
-# Host entries (added for each instance)
-Host cloudx-{env}-hostname
-    HostName i-1234567890
-```
+2. Individual host entries for each instance:
+   - Uses consistent naming (cloudx-{env}-hostname)
+   - Maps to instance IDs automatically
+   - Inherits environment-level settings
 
-When adding new instances to an existing environment, the setup command will only add the specific host entry, preserving the existing environment configuration.
+When adding new instances to an existing environment, you can choose to:
+- Override the environment configuration with new settings
+- Add instance-specific settings while preserving the environment config
 
 ### VSCode Configuration
 
@@ -179,7 +190,7 @@ Note: The connect command is typically used through the SSH ProxyCommand configu
 
 ## AWS Permissions
 
-The AWS user/role needs these permissions:
+The AWS user needs these permissions:
 
 ```json
 {
@@ -199,6 +210,7 @@ The AWS user/role needs these permissions:
     ]
 }
 ```
+Note: This user should be created using the cloudX-user product from Service Catalog in the AWS Console. This assures proper permissions and naming conventions.
 
 ## Troubleshooting
 
