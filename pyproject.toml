@@ -30,7 +30,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/easytocloud/cloudX-proxy"
-Repository = "git+https://github.com/easytocloud/cloudX-proxy.git"
+Repository = "https://github.com/easytocloud/cloudX-proxy"
 Issues = "https://github.com/easytocloud/cloudX-proxy/issues"
 Changelog = "https://github.com/easytocloud/cloudX-proxy/blob/main/CHANGELOG.md"
 
