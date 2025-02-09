@@ -127,7 +127,7 @@ class CloudXSetup:
             bool: True if key was set up successfully
         """
         self.print_header("SSH Key Configuration")
-        self.print_status("Checking SSH key '{self.ssh_key}' configuration...")
+        self.print_status(f"Checking SSH key '{self.ssh_key}' configuration...")
         
         try:
             # Create .ssh/vscode directory if it doesn't exist
@@ -250,7 +250,6 @@ class CloudXSetup:
             
             if need_base_config:
                 self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
-                # Build ProxyCommand with all necessary parameters
                 # Build ProxyCommand with only non-default parameters
                 proxy_command = "uvx cloudx-proxy connect %h %p"
                 if self.profile != "vscode":
