@@ -1,3 +1,21 @@
+# [2026.0.0](https://github.com/easytocloud/cloudX-proxy/compare/2025.3.0...2026.0.0) (2025-02-09)
+
+
+* "feat!: add setup command and restructure CLI ([0ad983e](https://github.com/easytocloud/cloudX-proxy/commit/0ad983e42da10856e420f207bec069aa523fc314))
+
+
+### BREAKING CHANGES
+
+* The main command now requires connect subcommand for connections.
+Previous: uvx cloudx-proxy i-1234567890
+New: uvx cloudx-proxy connect i-1234567890
+
+Added setup command that automates:
+- AWS profile configuration with cloudX-{env}-{user} format
+- SSH key management with 1Password integration
+- Environment-specific SSH config generation
+- Instance setup status verification"
+
 # [2025.3.0](https://github.com/easytocloud/cloudX-proxy/compare/2025.2.4...2025.3.0) (2025-02-08)
 
 
