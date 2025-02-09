@@ -1,4 +1,12 @@
+# [2026.1.0](https://github.com/easytocloud/cloudX-proxy/compare/2026.0.2...2026.1.0) (2025-02-09)
 
+
+### Bug Fixes
+
+* add custom version plugin for semantic-release ([5e2109f](https://github.com/easytocloud/cloudX-proxy/commit/5e2109f320f396a7a3436e9e44f99f24994afe76))
+* enforce 2025.x.y format in semantic-release ([d762cef](https://github.com/easytocloud/cloudX-proxy/commit/d762cef6fabdd38d2f8807bf106d0d803874d3ff))
+* enforce 2025.x.y version format ([56bba2b](https://github.com/easytocloud/cloudX-proxy/commit/56bba2b5b15ea41a0e1e0786ed89da8c29bda5d9))
+* use local path for custom version plugin ([b5d72ce](https://github.com/easytocloud/cloudX-proxy/commit/b5d72ce065bae5874b3c79127489f2123e27821b))
 
 ### Features CHANGES
 
