@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 
 class CloudXSetup:
     def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", aws_env: str = None):
-        """Initialize CloudX setup.
+        """Initialize cloudx-proxy setup.
         
         Args:
             profile: AWS profile name (default: "vscode")
@@ -106,55 +106,43 @@ class CloudXSetup:
                 os.environ["AWS_CONFIG_FILE"] = os.path.join(aws_env_dir, "config")
                 os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.path.join(aws_env_dir, "credentials")
 
-            # Check if profile exists
-            session = boto3.Session(profile_name=self.profile)
+            # Try to create session with profile
+            try:
+                session = boto3.Session(profile_name=self.profile)
+            except:
+                # Profile doesn't exist, create it
+                self.print_status(f"AWS profile '{self.profile}' not found", False, 2)
+                self.print_status("Setting up AWS profile...", None, 2)
+                print("\033[96mPlease enter your AWS credentials:\033[0m")
+                
+                # Use aws configure command
+                subprocess.run([
+                    'aws', 'configure',
+                    '--profile', self.profile
+                ], check=True)
+                
+                # Create new session with configured profile
+                session = boto3.Session(profile_name=self.profile)
+
+            # Verify the profile works
             try:
                 identity = session.client('sts').get_caller_identity()
                 user_arn = identity['Arn']
                 
                 if any(part.startswith('cloudX-') for part in user_arn.split('/')):
                     self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
+                    self.setup_steps['aws']['done'] = True
+                    return True
                 else:
-                    self.print_status(f"AWS profile '{self.profile}' exists but doesn't match cloudX-{{env}}-{{user}} format", False, 2)
-                return True
+                    self.print_status(f"AWS profile exists but doesn't match cloudX-{{env}}-{{user}} format", False, 2)
+                    self.print_status("Please ensure your IAM user follows the format: cloudX-{env}-{username}", None, 2)
+                    return False
             except ClientError:
-                self.print_status(f"AWS profile '{self.profile}' not found or invalid", False, 2)
-
-            # Ask user if they want to set up the profile
-            setup_profile = self.prompt(f"Would you like to set up AWS profile '{self.profile}'?", "Y").lower() != 'n'
-            if not setup_profile:
-                self.print_status("Skipping AWS profile setup", None, 2)
-                return True
-
-            # Profile doesn't exist or is invalid, set it up
-            self.print_status("Setting up AWS profile...", None, 2)
-            print("\033[96mPlease enter your AWS credentials:\033[0m")
-            
-            # Use aws configure command
-            subprocess.run([
-                'aws', 'configure',
-                '--profile', self.profile
-            ], check=True)
-
-            # Verify the profile works
-            session = boto3.Session(profile_name=self.profile)
-            identity = session.client('sts').get_caller_identity()
-            user_arn = identity['Arn']
-            
-            if any(part.startswith('cloudX-') for part in user_arn.split('/')):
-                self.print_status("AWS profile setup complete and matches cloudX format", True, 2)
-            else:
-                self.print_status("AWS profile setup complete but doesn't match cloudX-{env}-{user} format", False, 2)
-            
-            self.setup_steps['aws']['done'] = True
-            return True
+                self.print_status("Invalid AWS credentials", False, 2)
+                return False
 
         except Exception as e:
             self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
-            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-            if continue_setup:
-                self.print_status("Continuing setup despite AWS profile issues", None, 2)
-                return True
             return False
 
     def setup_ssh_key(self) -> bool:
@@ -229,7 +217,7 @@ class CloudXSetup:
             subprocess.run([
                 'op', 'document', 'create',
                 str(self.ssh_key_file),
-                '--title', f'CloudX SSH Key - {self.ssh_key}'
+                '--title', f'cloudx-proxy SSH Key - {self.ssh_key}'
             ], check=True)
             return True
         except subprocess.CalledProcessError:
@@ -237,7 +225,6 @@ class CloudXSetup:
             return False
 
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
-        """Set up SSH config for the instance."""
         self.print_header("SSH Configuration")
         """Set up SSH config for the instance.
         
@@ -297,7 +284,7 @@ class CloudXSetup:
                     proxy_command += f" --key-path {self.ssh_key_file}.pub"
 
                 # Build base configuration
-                base_config = f"""# CloudX SSH Configuration
+                base_config = f"""# cloudx-proxy SSH Configuration
 Host cloudx-{cloudx_env}-*
     User ec2-user
 """
@@ -350,7 +337,7 @@ Host cloudx-{cloudx_env}-{hostname}
 
             self.print_status("\nSSH configuration summary:", None)
             self.print_status(f"Main config: {main_config}", None, 2)
-            self.print_status(f"CloudX config: {self.ssh_config_file}", None, 2)
+            self.print_status(f"cloudx-proxy config: {self.ssh_config_file}", None, 2)
             self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
             
             self.setup_steps['ssh']['done'] = True
