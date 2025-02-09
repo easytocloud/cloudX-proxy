@@ -1,24 +1,6 @@
-## [2026.0.2](https://github.com/easytocloud/cloudX-proxy/compare/2026.0.1...2026.0.2) (2025-02-09)
 
 
-### Bug Fixes
-
-* use package version in CLI version flag ([8f21373](https://github.com/easytocloud/cloudX-proxy/commit/8f213739e5c5d1e753e846ec8df60f9abde6e0d7))
-
-## [2026.0.1](https://github.com/easytocloud/cloudX-proxy/compare/2026.0.0...2026.0.1) (2025-02-09)
-
-
-### Bug Fixes
-
-* correct repository URL format in pyproject.toml ([9352771](https://github.com/easytocloud/cloudX-proxy/commit/93527710145b870d071d640ccde666b1f3f812f8))
-
-# [2026.0.0](https://github.com/easytocloud/cloudX-proxy/compare/2025.3.0...2026.0.0) (2025-02-09)
-
-
-* "feat!: add setup command and restructure CLI ([0ad983e](https://github.com/easytocloud/cloudX-proxy/commit/0ad983e42da10856e420f207bec069aa523fc314))
-
-
-### BREAKING CHANGES
+### Features CHANGES
 
 * The main command now requires connect subcommand for connections.
 Previous: uvx cloudx-proxy i-1234567890
