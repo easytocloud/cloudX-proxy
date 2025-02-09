@@ -24,6 +24,19 @@ class CloudXSetup:
         self.ssh_config_file = self.ssh_dir / "config"
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.using_1password = False
+        self.setup_steps = {
+            'aws': {'done': False, 'name': 'AWS Profile Setup'},
+            'ssh': {'done': False, 'name': 'SSH Configuration'},
+            'instance': {'done': False, 'name': 'Instance Setup'}
+        }
+
+    def print_header(self, text: str) -> None:
+        """Print a section header.
+        
+        Args:
+            text: The header text
+        """
+        print(f"\n\033[1;94m=== {text} ===\033[0m")
 
     def print_status(self, message: str, status: bool = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
@@ -41,6 +54,42 @@ class CloudXSetup:
             print(f"{prefix}{color}{symbol}{reset} {message}")
         else:
             print(f"{prefix}○ {message}")
+
+    def print_progress(self) -> None:
+        """Print the overall setup progress."""
+        completed = sum(1 for step in self.setup_steps.values() if step['done'])
+        total = len(self.setup_steps)
+        percentage = (completed / total) * 100
+        width = 40
+        filled = int(width * completed / total)
+        bar = "█" * filled + "░" * (width - filled)
+        print(f"\n\033[1;96mSetup Progress: {percentage:.1f}%\033[0m")
+        print(f"[\033[96m{bar}\033[0m]")
+
+    def prompt(self, message: str, default: str = None) -> str:
+        """Display a colored prompt for user input.
+        
+        Args:
+            message: The prompt message
+            default: Default value (shown in brackets)
+        
+        Returns:
+            str: User's input or default value
+        """
+        if default:
+            prompt_text = f"\033[93m{message} [{default}]: \033[0m"
+        else:
+            prompt_text = f"\033[93m{message}: \033[0m"
+        response = input(prompt_text)
+        return response if response else default
+
+    def print_summary(self) -> None:
+        """Print a summary of the setup results."""
+        print("\n\033[1;95m=== Setup Summary ===\033[0m")
+        for step_id, step in self.setup_steps.items():
+            symbol = "✓" if step['done'] else "✗"
+            color = "\033[92m" if step['done'] else "\033[91m"
+            print(f"{color}{symbol}\033[0m {step['name']}")
 
     def setup_aws_profile(self) -> bool:
         """Set up AWS profile using aws configure command.
@@ -72,14 +121,14 @@ class CloudXSetup:
                 self.print_status(f"AWS profile '{self.profile}' not found or invalid", False, 2)
 
             # Ask user if they want to set up the profile
-            setup_profile = input(f"Would you like to set up AWS profile '{self.profile}'? (Y/n): ").lower() != 'n'
+            setup_profile = self.prompt(f"Would you like to set up AWS profile '{self.profile}'?", "Y").lower() != 'n'
             if not setup_profile:
                 self.print_status("Skipping AWS profile setup", None, 2)
                 return True
 
             # Profile doesn't exist or is invalid, set it up
             self.print_status("Setting up AWS profile...", None, 2)
-            print("Please enter your AWS credentials:")
+            print("\033[96mPlease enter your AWS credentials:\033[0m")
             
             # Use aws configure command
             subprocess.run([
@@ -97,17 +146,19 @@ class CloudXSetup:
             else:
                 self.print_status("AWS profile setup complete but doesn't match cloudX-{env}-{user} format", False, 2)
             
+            self.setup_steps['aws']['done'] = True
             return True
 
         except Exception as e:
             self.print_status(f"Error: {str(e)}", False, 2)
-            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite AWS profile issues", None, 2)
                 return True
             return False
 
     def setup_ssh_key(self) -> bool:
+        self.print_header("SSH Key Configuration")
         """Set up SSH key pair.
         
         Returns:
@@ -124,11 +175,11 @@ class CloudXSetup:
             
             if key_exists:
                 self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
-                self.using_1password = input("Would you like to use 1Password SSH agent? (y/N): ").lower() == 'y'
+                self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
                 if self.using_1password:
                     self.print_status("Using 1Password SSH agent", True, 2)
                 else:
-                    store_in_1password = input("Would you like to store the private key in 1Password? (y/N): ").lower() == 'y'
+                    store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
                     if store_in_1password:
                         if self._store_key_in_1password():
                             self.print_status("Private key stored in 1Password", True, 2)
@@ -144,22 +195,23 @@ class CloudXSetup:
                 ], check=True)
                 self.print_status("SSH key generated", True, 2)
                 
-                self.using_1password = input("Would you like to use 1Password SSH agent? (y/N): ").lower() == 'y'
+                self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
                 if self.using_1password:
                     self.print_status("Using 1Password SSH agent", True, 2)
                 else:
-                    store_in_1password = input("Would you like to store the private key in 1Password? (y/N): ").lower() == 'y'
+                    store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
                     if store_in_1password:
                         if self._store_key_in_1password():
                             self.print_status("Private key stored in 1Password", True, 2)
                         else:
                             self.print_status("Failed to store private key in 1Password", False, 2)
             
+            self.setup_steps['ssh']['done'] = True
             return True
 
         except Exception as e:
             self.print_status(f"Error: {str(e)}", False, 2)
-            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite SSH key issues", None, 2)
                 return True
@@ -185,6 +237,7 @@ class CloudXSetup:
             return False
 
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
+        self.print_header("SSH Configuration")
         """Set up SSH config for the instance.
         
         This method manages the SSH configuration in ~/.ssh/vscode/config, with the following behavior:
@@ -303,7 +356,7 @@ Host cloudx-{cloudx_env}-{hostname}
 
         except Exception as e:
             self.print_status(f"Error: {str(e)}", False, 2)
-            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
                 return True
@@ -376,6 +429,7 @@ Host cloudx-{cloudx_env}-{hostname}
             return False, False
 
     def wait_for_setup_completion(self, instance_id: str) -> bool:
+        self.print_header("Instance Setup Check")
         """Wait for instance setup to complete.
         
         Args:
@@ -390,7 +444,7 @@ Host cloudx-{cloudx_env}-{hostname}
         
         if not is_running:
             self.print_status("Instance is not running or not accessible via SSM", False, 2)
-            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite instance access issues", None, 2)
                 return True
@@ -400,7 +454,7 @@ Host cloudx-{cloudx_env}-{hostname}
             self.print_status("Instance setup is complete", True, 2)
             return True
         
-        wait = input("Instance setup is not complete. Would you like to wait? (Y/n): ").lower() != 'n'
+        wait = self.prompt("Instance setup is not complete. Would you like to wait?", "Y").lower() != 'n'
         if not wait:
             self.print_status("Skipping instance setup check", None, 2)
             return True
@@ -412,10 +466,13 @@ Host cloudx-{cloudx_env}-{hostname}
             
             if not is_running:
                 self.print_status("Instance is no longer running or accessible", False, 2)
-                continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
+            if continue_setup:
+                self.setup_steps['instance']['done'] = True
                 if continue_setup:
                     self.print_status("Continuing setup despite instance issues", None, 2)
-                    return True
+                    self.setup_steps['instance']['done'] = True
+                return True
                 return False
             
             if is_complete:

@@ -65,28 +65,38 @@ def setup(profile: str, ssh_key: str, aws_env: str):
     try:
         setup = CloudXSetup(profile=profile, ssh_key=ssh_key, aws_env=aws_env)
         
+        print("\n\033[1;95m=== CloudX Setup ===\033[0m")
+        setup.print_progress()
+        
         # Set up AWS profile
         if not setup.setup_aws_profile():
             sys.exit(1)
+        setup.print_progress()
         
         # Set up SSH key
         if not setup.setup_ssh_key():
             sys.exit(1)
+        setup.print_progress()
         
         # Get CloudX environment and instance details
-        cloudx_env = click.prompt("Enter CloudX environment (e.g., dev, prod)", type=str)
-        instance_id = click.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)", type=str)
-        hostname = click.prompt("Enter hostname for the instance", type=str)
+        cloudx_env = setup.prompt("Enter CloudX environment (e.g., dev, prod)")
+        instance_id = setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
+        hostname = setup.prompt("Enter hostname for the instance")
         
         # Set up SSH config
         if not setup.setup_ssh_config(cloudx_env, instance_id, hostname):
             sys.exit(1)
+        setup.print_progress()
         
         # Check instance setup status
         setup.wait_for_setup_completion(instance_id)
+        setup.print_progress()
+        
+        # Print final summary
+        setup.print_summary()
         
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        print(f"\n\033[91mError: {str(e)}\033[0m", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':
