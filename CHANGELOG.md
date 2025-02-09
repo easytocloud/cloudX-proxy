@@ -1,3 +1,21 @@
+# [0.3.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.2.0...v0.3.0) (2025-02-09)
+
+
+### Bug Fixes
+
+* improve SSH key message and config header ([94dd9b6](https://github.com/easytocloud/cloudX-proxy/commit/94dd9b6bd42b2b23e2e732470adf0096aa98e0fb))
+* improve UI formatting and progress tracking ([570a0de](https://github.com/easytocloud/cloudX-proxy/commit/570a0deab309f42ee8c961062596189f8d5d6a91))
+* only include non-default parameters in ProxyCommand ([e1ecae9](https://github.com/easytocloud/cloudX-proxy/commit/e1ecae9fd91ae1bbed92d60ed384a0e405269a35))
+* simplify setup UI and improve error handling ([613cba3](https://github.com/easytocloud/cloudX-proxy/commit/613cba3596c5631d7125c814f0f829c7171ff529))
+* update branding to cloudx-proxy ([b354d84](https://github.com/easytocloud/cloudX-proxy/commit/b354d84d99005d11f51212ce70d40c0d36ea47dd))
+
+
+### Features
+
+* add status indicators to instance setup check ([dfb3624](https://github.com/easytocloud/cloudX-proxy/commit/dfb36240583b46a54742306f9eae24e592d65fbe))
+* enhance setup UI with progress bar, colors, and summary ([f72efd1](https://github.com/easytocloud/cloudX-proxy/commit/f72efd175c7805cfd41605f33d5056e714911972))
+* extract default env from IAM user and improve SSH config handling ([25fa9c9](https://github.com/easytocloud/cloudX-proxy/commit/25fa9c976d4ae992e5217680405cd407e613eac3))
+
 # [0.2.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.1.1...v0.2.0) (2025-02-09)
 
 
