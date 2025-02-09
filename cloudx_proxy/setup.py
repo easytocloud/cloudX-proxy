@@ -323,15 +323,20 @@ Host cloudx-{cloudx_env}-{hostname}
             ssm = session.client('ssm')
             
             # Check if instance is online in SSM
+            self.print_status("Checking instance status in SSM...", None, 4)
             response = ssm.describe_instance_information(
                 Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
             )
             is_running = bool(response['InstanceInformationList'])
             
             if not is_running:
+                self.print_status("Instance is not accessible via SSM", False, 4)
                 return False, False
             
+            self.print_status("Instance is accessible via SSM", True, 4)
+            
             # Check setup status using SSM command
+            self.print_status("Checking setup status...", None, 4)
             response = ssm.send_command(
                 InstanceIds=[instance_id],
                 DocumentName='AWS-RunShellScript',
@@ -358,10 +363,16 @@ Host cloudx-{cloudx_env}-{hostname}
             
             is_setup_complete = result['Status'] == 'Success' and result['StandardOutputContent'].strip() == 'DONE'
             
+            if is_setup_complete:
+                self.print_status("Setup is complete", True, 4)
+            else:
+                status = result['StandardOutputContent'].strip()
+                self.print_status(f"Setup status: {status}", None, 4)
+            
             return True, is_setup_complete
 
         except Exception as e:
-            print(f"Error checking instance setup: {e}")
+            self.print_status(f"Error: {str(e)}", False, 4)
             return False, False
 
     def wait_for_setup_completion(self, instance_id: str) -> bool:
