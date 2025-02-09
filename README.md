@@ -45,14 +45,9 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
    - Uses the SSH configuration to connect to instances
    - Handles file synchronization and terminal sessions
 
-## AWS Credentials Setup
+## Installation
 
-The proxy expects to find AWS credentials in a profile named 'vscode' by default. These credentials should be the Access Key and Secret Key that were created by deploying the cloudX-user stack in your AWS account. The cloudX-user stack creates an IAM user with the minimal permissions required for:
-- Starting/stopping EC2 instances
-- Establishing SSM sessions
-- Pushing SSH keys via EC2 Instance Connect
-
-The proxy supports easytocloud's AWS profile organizer for managing multiple AWS environments. You can store your AWS configuration and credentials in `~/.aws/aws-envs/<environment>` directories and use the `--aws-env` option to specify which environment to use.
+The cloudX-proxy package is available on PyPI and can run using uvx without explicit installation.
 
 ## Setup
 
@@ -72,7 +67,7 @@ uvx cloudx-proxy setup --aws-env prod
 The setup command will:
 
 1. Configure AWS Profile:
-   - Creates/validates AWS profile with cloudX-{env}-{user} format
+   - Creates/validates AWS profile for IAM user in cloudX-{env}-{user} format
    - Supports AWS environment directories via --aws-env
    - Uses aws configure for credential input
 
@@ -95,7 +90,40 @@ The setup command will:
 
 ### SSH Configuration
 
-The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. It creates:
+The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
+
+```bash
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+```
+
+Will create a configuration like this:
+
+```
+# Base environment config (created once per environment)
+Host cloudx-dev-*
+    User ec2-user
+    IdentityFile ~/.ssh/vscode/mykey
+    ProxyCommand uvx cloudx-proxy connect %h %p --profile myprofile --ssh-key mykey
+
+# Host entry (added for specific instance)
+Host cloudx-dev-myserver
+    HostName i-0123456789abcdef0
+```
+
+Allowing the user to:
+
+```bash
+ssh cloudx-dev-myserver
+scp cloudx-dev-myserver:/path/to/file /local/path/to/file
+```
+without the need to provide any further credentials.
+
+In these examples, ssh will use cloudx-proxy to connect to AWS with the `myprofile` credentials, allowing it to check the instance state and start the instance if it's stopped. Next cloudx-proxy will use `myprofile` to push the public part of the key `mykey` to the instance using SSM. Finally a tunnel is created between the local machine and the instance, using the SSM plugin, allowing SSH to connect to the instance using the private part of the `mykey` key. 
+
+VSCode will be able to connect to the instance using the same SSH configuration.
+
+### SSH Configuration Details
+The setup command creates:
 
 1. A base configuration for each environment (cloudx-{env}-*) with:
    - User and key settings
@@ -121,7 +149,7 @@ When adding new instances to an existing environment, you can choose to:
        "remote.SSH.connectTimeout": 90
    }
    ```
-
+This extra long timeout is necessary to account for the time it takes to start the instance and establish the connection.
 ## Usage
 
 ### Command Line Options
@@ -189,28 +217,28 @@ Note: The connect command is typically used through the SSH ProxyCommand configu
 5. VSCode will handle the rest, using cloudX-proxy to establish the connection
 
 ## AWS Permissions
+### IAM User Permissions
 
-The AWS user needs these permissions:
+The AWS IAM user has to be member of the AWS IAM Group that is created as part of the cloudX environment.
+The group uses ABAC (Attribute Based Access Control) to allow access to the instances based on the tags.
+The ABAC tag defaults to `cloudxuser` and should have the value of the username of the user that owns the instance.
 
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:StartInstances",
-                "ec2:DescribeInstances",
-                "ssm:StartSession",
-                "ssm:DescribeInstanceInformation",
-                "ec2-instance-connect:SendSSHPublicKey"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
-Note: This user should be created using the cloudX-user product from Service Catalog in the AWS Console. This assures proper permissions and naming conventions.
+Example:
+- AWS IAM User `cloudx-dev-user1` is connecting to an instance with the tag `cloudxuser=cloudx-dev-user1`
+
+Note: This user should be created using the cloudX-user product from Service Catalog in the AWS Console. This assures proper permissions and naming conventions. The user in the example is member of the `dev` group, part as part of the `cloudx-dev` environment.
+
+The EC2 instance should have the tag `cloudxuser` with the value of the username of the user that is connecting to the instance. This is automatically set when the instance is created using the cloudX-instance product from Service Catalog in the AWS Console.
+
+### EC2 Instance Permissions
+
+The EC2 instance has a profile/role that provides enough permissions to allow the AWS SSM agent to connect to the instance, as well as
+- CodeArtifact read only access, to use as a source for pip
+- CodeCommit read only access, to pull code from the repository for installation
+- Organizations read only access, to create aws sso configuration
+- EC2 basic access, to allow the instance to introspect for tags and other metadata
+
+These permissions are required to bootstrap the instance, so that after creation the instance can perform software installation and configuration without a user being present.
 
 ## Troubleshooting
 
