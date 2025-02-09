@@ -24,6 +24,7 @@ class CloudXSetup:
         self.ssh_config_file = self.ssh_dir / "config"
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.using_1password = False
+        self.default_env = None
 
     def print_header(self, text: str) -> None:
         """Print a section header.
@@ -105,7 +106,10 @@ class CloudXSetup:
                 identity = session.client('sts').get_caller_identity()
                 user_arn = identity['Arn']
                 
-                if any(part.startswith('cloudX-') for part in user_arn.split('/')):
+                # Extract environment from IAM user name
+                user_parts = [part for part in user_arn.split('/') if part.startswith('cloudX-')]
+                if user_parts:
+                    self.default_env = user_parts[0].split('-')[1]  # Extract env from cloudX-{env}-{user}
                     self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
                     return True
                 else:
@@ -198,6 +202,58 @@ class CloudXSetup:
             print("Error: 1Password CLI not installed or not signed in.")
             return False
 
+    def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
+        """Add settings to a specific host entry.
+        
+        Args:
+            cloudx_env: CloudX environment
+            instance_id: EC2 instance ID
+            hostname: Hostname for the instance
+            current_config: Current SSH config content
+        
+        Returns:
+            bool: True if settings were added successfully
+        """
+        try:
+            # Build host entry with all settings
+            proxy_command = "uvx cloudx-proxy connect %h %p"
+            if self.profile != "vscode":
+                proxy_command += f" --profile {self.profile}"
+            if self.aws_env:
+                proxy_command += f" --aws-env {self.aws_env}"
+            if self.ssh_key != "vscode":
+                proxy_command += f" --ssh-key {self.ssh_key}"
+
+            host_entry = f"""
+Host cloudx-{cloudx_env}-{hostname}
+    HostName {instance_id}
+    User ec2-user
+"""
+            if self.using_1password:
+                host_entry += f"""    IdentityAgent ~/.1password/agent.sock
+    IdentityFile {self.ssh_key_file}.pub
+    IdentitiesOnly yes
+"""
+            else:
+                host_entry += f"""    IdentityFile {self.ssh_key_file}
+"""
+            host_entry += f"""    ProxyCommand {proxy_command}
+"""
+            
+            # Append host entry
+            with open(self.ssh_config_file, 'a') as f:
+                f.write(host_entry)
+            self.print_status("Host entry added with settings", True, 2)
+            return True
+
+        except Exception as e:
+            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
+            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
+            if continue_setup:
+                self.print_status("Continuing setup despite SSH config issues", None, 2)
+                return True
+            return False
+
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
         """Set up SSH config for the instance.
         
@@ -239,51 +295,74 @@ class CloudXSetup:
         self.print_status("Setting up SSH configuration...")
         
         try:
-            # Check if we need to create base config
-            need_base_config = True
+            # Check existing configuration
             if self.ssh_config_file.exists():
                 current_config = self.ssh_config_file.read_text()
                 # Check if configuration for this environment already exists
                 if f"Host cloudx-{cloudx_env}-*" in current_config:
-                    need_base_config = False
                     self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
-            
-            if need_base_config:
-                self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
-                # Build ProxyCommand with only non-default parameters
-                proxy_command = "uvx cloudx-proxy connect %h %p"
-                if self.profile != "vscode":
-                    proxy_command += f" --profile {self.profile}"
-                if self.aws_env:
-                    proxy_command += f" --aws-env {self.aws_env}"
-                if self.ssh_key != "vscode":
-                    proxy_command += f" --ssh-key {self.ssh_key}"
+                    choice = self.prompt(
+                        "Would you like to (1) override the existing config or "
+                        "(2) add settings to the specific host entry?",
+                        "1"
+                    )
+                    if choice == "2":
+                        # Add settings to specific host entry
+                        self.print_status("Adding settings to specific host entry", None, 2)
+                        return self._add_host_entry(cloudx_env, instance_id, hostname, current_config)
+                    else:
+                        # Remove existing config for this environment
+                        self.print_status("Removing existing configuration", None, 2)
+                        lines = current_config.splitlines()
+                        new_lines = []
+                        skip = False
+                        for line in lines:
+                            if line.strip() == f"Host cloudx-{cloudx_env}-*":
+                                skip = True
+                            elif skip and line.startswith("Host "):
+                                skip = False
+                            if not skip:
+                                new_lines.append(line)
+                        current_config = "\n".join(new_lines)
+                        with open(self.ssh_config_file, 'w') as f:
+                            f.write(current_config)
 
-                # Build base configuration
-                base_config = f"""# cloudx-proxy SSH Configuration
+            # Create base config
+            self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
+            # Build ProxyCommand with only non-default parameters
+            proxy_command = "uvx cloudx-proxy connect %h %p"
+            if self.profile != "vscode":
+                proxy_command += f" --profile {self.profile}"
+            if self.aws_env:
+                proxy_command += f" --aws-env {self.aws_env}"
+            if self.ssh_key != "vscode":
+                proxy_command += f" --ssh-key {self.ssh_key}"
+
+            # Build base configuration
+            base_config = f"""# cloudx-proxy SSH Configuration
 Host cloudx-{cloudx_env}-*
     User ec2-user
 """
-                # Add 1Password or standard key configuration
-                if self.using_1password:
-                    base_config += f"""    IdentityAgent ~/.1password/agent.sock
+            # Add 1Password or standard key configuration
+            if self.using_1password:
+                base_config += f"""    IdentityAgent ~/.1password/agent.sock
     IdentityFile {self.ssh_key_file}.pub
     IdentitiesOnly yes
 """
-                else:
-                    base_config += f"""    IdentityFile {self.ssh_key_file}
+            else:
+                base_config += f"""    IdentityFile {self.ssh_key_file}
 """
-                # Add ProxyCommand
-                base_config += f"""    ProxyCommand {proxy_command}
+            # Add ProxyCommand
+            base_config += f"""    ProxyCommand {proxy_command}
 """
-                
-                # If file exists, append the new config, otherwise create it
-                if self.ssh_config_file.exists():
-                    with open(self.ssh_config_file, 'a') as f:
-                        f.write("\n" + base_config)
-                else:
-                    self.ssh_config_file.write_text(base_config)
-                self.print_status("Base configuration created", True, 2)
+            
+            # If file exists, append the new config, otherwise create it
+            if self.ssh_config_file.exists():
+                with open(self.ssh_config_file, 'a') as f:
+                    f.write("\n" + base_config)
+            else:
+                self.ssh_config_file.write_text(base_config)
+            self.print_status("Base configuration created", True, 2)
 
             # Add specific host entry
             self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)

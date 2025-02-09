@@ -16,9 +16,9 @@ def cli():
 @click.argument('port', type=int, default=22)
 @click.option('--profile', default='vscode', help='AWS profile to use (default: vscode)')
 @click.option('--region', help='AWS region (default: from profile, or eu-west-1 if not set)')
-@click.option('--key-path', help='Path to SSH public key (default: ~/.ssh/vscode/vscode.pub)')
+@click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-def connect(instance_id: str, port: int, profile: str, region: str, key_path: str, aws_env: str):
+def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, aws_env: str):
     """Connect to an EC2 instance via SSM.
     
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
@@ -34,7 +34,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, key_path: st
             port=port,
             profile=profile,
             region=region,
-            public_key_path=key_path,
+            ssh_key=ssh_key,
             aws_env=aws_env
         )
         
@@ -76,7 +76,7 @@ def setup(profile: str, ssh_key: str, aws_env: str):
             sys.exit(1)
         
         # Get environment and instance details
-        cloudx_env = setup.prompt("Enter environment (e.g., dev, prod)")
+        cloudx_env = setup.prompt("Enter environment", getattr(setup, 'default_env', None))
         instance_id = setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
         hostname = setup.prompt("Enter hostname for the instance")
         
