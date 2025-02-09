@@ -1,10 +1,12 @@
 import os
 import sys
 import click
+from . import __version__
 from .core import CloudXClient
 from .setup import CloudXSetup
 
 @click.group()
+@click.version_option(version=__version__)
 def cli():
     """CloudX Client - Connect to EC2 instances via SSM for VSCode Remote SSH."""
     pass
