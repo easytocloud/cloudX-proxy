@@ -4,7 +4,7 @@
     "repositoryUrl": "https://github.com/easytocloud/cloudX-proxy.git",
     "plugins": [
         {
-            "path": "semantic-release-plugin-custom-version",
+            "path": "./semantic-release-plugin-custom-version.js",
             "version": "2025.4.0"
         },
         ["@semantic-release/commit-analyzer", {
