@@ -1,6 +1,6 @@
 {
     "branches": ["main"],
-    "tagFormat": "${version}",
+    "tagFormat": "2025.${minor}.${patch}",
     "repositoryUrl": "https://github.com/easytocloud/cloudX-proxy.git",
     "plugins": [
         ["@semantic-release/commit-analyzer", {
