@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 class CloudXClient:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode", 
-                 region: str = None, public_key_path: str = None, aws_env: str = None):
+                 region: str = None, ssh_key: str = "vscode", aws_env: str = None):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -15,7 +15,7 @@ class CloudXClient:
             port: SSH port number (default: 22)
             profile: AWS profile to use (default: "vscode")
             region: AWS region (default: from profile)
-            public_key_path: Path to SSH public key (default: ~/.ssh/vscode/vscode.pub)
+            ssh_key: SSH key name to use (default: "vscode")
             aws_env: AWS environment directory (default: None, uses ~/.aws)
         """
         self.instance_id = instance_id
@@ -39,10 +39,9 @@ class CloudXClient:
         self.ec2 = self.session.client('ec2')
         self.ec2_connect = self.session.client('ec2-instance-connect')
         
-        # Default public key path if not provided
-        if not public_key_path:
-            public_key_path = os.path.expanduser("~/.ssh/vscode/vscode.pub")
-        self.public_key_path = Path(public_key_path)
+        # Set up SSH key path
+        self.ssh_dir = os.path.expanduser("~/.ssh/vscode")
+        self.ssh_key = os.path.join(self.ssh_dir, f"{ssh_key}.pub")
 
     def log(self, message: str) -> None:
         """Log message to stderr to avoid interfering with SSH connection."""
@@ -88,7 +87,7 @@ class CloudXClient:
     def push_ssh_key(self) -> bool:
         """Push SSH public key to instance via EC2 Instance Connect."""
         try:
-            with open(self.public_key_path) as f:
+            with open(self.ssh_key) as f:
                 public_key = f.read()
             
             self.ec2_connect.send_ssh_public_key(
