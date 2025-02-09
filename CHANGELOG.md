@@ -1,3 +1,5 @@
+## [0.1.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.1.0...v0.1.1) (2025-02-09)
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
