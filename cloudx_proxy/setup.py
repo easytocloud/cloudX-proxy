@@ -251,11 +251,14 @@ class CloudXSetup:
             if need_base_config:
                 self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
                 # Build ProxyCommand with all necessary parameters
-                proxy_command = f"uvx cloudx-proxy connect %h %p --profile {self.profile}"
+                # Build ProxyCommand with only non-default parameters
+                proxy_command = "uvx cloudx-proxy connect %h %p"
+                if self.profile != "vscode":
+                    proxy_command += f" --profile {self.profile}"
                 if self.aws_env:
                     proxy_command += f" --aws-env {self.aws_env}"
                 if self.ssh_key != "vscode":
-                    proxy_command += f" --key-path {self.ssh_key_file}.pub"
+                    proxy_command += f" --ssh-key {self.ssh_key}"
 
                 # Build base configuration
                 base_config = f"""# cloudx-proxy SSH Configuration
