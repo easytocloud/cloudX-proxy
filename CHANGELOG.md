@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.1.1...v0.2.0) (2025-02-09)
+
+
+### Features
+
+* add setup checklist and make all steps optional ([46016b8](https://github.com/easytocloud/cloudX-proxy/commit/46016b8fd7f1a1ae42fb34a7ff35365279883ab0))
+
 ## [0.1.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.1.0...v0.1.1) (2025-02-09)
 
 # Changelog
