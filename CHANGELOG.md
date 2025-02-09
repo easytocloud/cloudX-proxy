@@ -1,3 +1,10 @@
+## [2026.0.1](https://github.com/easytocloud/cloudX-proxy/compare/2026.0.0...2026.0.1) (2025-02-09)
+
+
+### Bug Fixes
+
+* correct repository URL format in pyproject.toml ([9352771](https://github.com/easytocloud/cloudX-proxy/commit/93527710145b870d071d640ccde666b1f3f812f8))
+
 # [2026.0.0](https://github.com/easytocloud/cloudX-proxy/compare/2025.3.0...2026.0.0) (2025-02-09)
 
 
