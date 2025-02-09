@@ -36,7 +36,7 @@ class CloudXSetup:
         Args:
             text: The header text
         """
-        print(f"\n\033[1;94m=== {text} ===\033[0m")
+        print(f"\n\n\033[1;94m=== {text} ===\033[0m")
 
     def print_status(self, message: str, status: bool = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
@@ -150,7 +150,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"Error: {str(e)}", False, 2)
+            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
             continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite AWS profile issues", None, 2)
@@ -237,6 +237,7 @@ class CloudXSetup:
             return False
 
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
+        """Set up SSH config for the instance."""
         self.print_header("SSH Configuration")
         """Set up SSH config for the instance.
         
@@ -352,10 +353,11 @@ Host cloudx-{cloudx_env}-{hostname}
             self.print_status(f"CloudX config: {self.ssh_config_file}", None, 2)
             self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
             
+            self.setup_steps['ssh']['done'] = True
             return True
 
         except Exception as e:
-            self.print_status(f"Error: {str(e)}", False, 2)
+            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
             continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
@@ -425,7 +427,7 @@ Host cloudx-{cloudx_env}-{hostname}
             return True, is_setup_complete
 
         except Exception as e:
-            self.print_status(f"Error: {str(e)}", False, 4)
+            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 4)
             return False, False
 
     def wait_for_setup_completion(self, instance_id: str) -> bool:
