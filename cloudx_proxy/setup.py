@@ -25,12 +25,31 @@ class CloudXSetup:
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.using_1password = False
 
+    def print_status(self, message: str, status: bool = None, indent: int = 0) -> None:
+        """Print a status message with optional checkmark/cross.
+        
+        Args:
+            message: The message to print
+            status: True for success (✓), False for failure (✗), None for no symbol
+            indent: Number of spaces to indent
+        """
+        prefix = " " * indent
+        if status is not None:
+            symbol = "✓" if status else "✗"
+            color = "\033[92m" if status else "\033[91m"  # Green for success, red for failure
+            reset = "\033[0m"
+            print(f"{prefix}{color}{symbol}{reset} {message}")
+        else:
+            print(f"{prefix}○ {message}")
+
     def setup_aws_profile(self) -> bool:
         """Set up AWS profile using aws configure command.
         
         Returns:
-            bool: True if profile was set up successfully
+            bool: True if profile was set up successfully or user chose to continue
         """
+        self.print_status("Checking AWS profile configuration...")
+        
         try:
             # Configure AWS environment if specified
             if self.aws_env:
@@ -41,14 +60,25 @@ class CloudXSetup:
             # Check if profile exists
             session = boto3.Session(profile_name=self.profile)
             try:
-                session.client('sts').get_caller_identity()
-                print(f"AWS profile '{self.profile}' already exists and is valid.")
+                identity = session.client('sts').get_caller_identity()
+                user_arn = identity['Arn']
+                
+                if any(part.startswith('cloudX-') for part in user_arn.split('/')):
+                    self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
+                else:
+                    self.print_status(f"AWS profile '{self.profile}' exists but doesn't match cloudX-{{env}}-{{user}} format", False, 2)
                 return True
             except ClientError:
-                pass
+                self.print_status(f"AWS profile '{self.profile}' not found or invalid", False, 2)
+
+            # Ask user if they want to set up the profile
+            setup_profile = input(f"Would you like to set up AWS profile '{self.profile}'? (Y/n): ").lower() != 'n'
+            if not setup_profile:
+                self.print_status("Skipping AWS profile setup", None, 2)
+                return True
 
             # Profile doesn't exist or is invalid, set it up
-            print(f"Setting up AWS profile '{self.profile}'...")
+            self.print_status("Setting up AWS profile...", None, 2)
             print("Please enter your AWS credentials:")
             
             # Use aws configure command
@@ -62,13 +92,19 @@ class CloudXSetup:
             identity = session.client('sts').get_caller_identity()
             user_arn = identity['Arn']
             
-            if not any(part.startswith('cloudX-') for part in user_arn.split('/')):
-                print(f"Warning: User ARN '{user_arn}' does not match expected format cloudX-{{env}}-{{user}}")
+            if any(part.startswith('cloudX-') for part in user_arn.split('/')):
+                self.print_status("AWS profile setup complete and matches cloudX format", True, 2)
+            else:
+                self.print_status("AWS profile setup complete but doesn't match cloudX-{env}-{user} format", False, 2)
             
             return True
 
         except Exception as e:
-            print(f"Error setting up AWS profile: {e}")
+            self.print_status(f"Error: {str(e)}", False, 2)
+            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            if continue_setup:
+                self.print_status("Continuing setup despite AWS profile issues", None, 2)
+                return True
             return False
 
     def setup_ssh_key(self) -> bool:
@@ -77,38 +113,56 @@ class CloudXSetup:
         Returns:
             bool: True if key was set up successfully
         """
+        self.print_status("Checking SSH key configuration...")
+        
         try:
             # Create .ssh/vscode directory if it doesn't exist
             self.ssh_dir.mkdir(parents=True, exist_ok=True)
+            self.print_status("SSH directory exists", True, 2)
             
             key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
             
             if key_exists:
-                print(f"SSH key '{self.ssh_key}' already exists.")
+                self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
                 self.using_1password = input("Would you like to use 1Password SSH agent? (y/N): ").lower() == 'y'
-                if not self.using_1password:
+                if self.using_1password:
+                    self.print_status("Using 1Password SSH agent", True, 2)
+                else:
                     store_in_1password = input("Would you like to store the private key in 1Password? (y/N): ").lower() == 'y'
                     if store_in_1password:
-                        self._store_key_in_1password()
+                        if self._store_key_in_1password():
+                            self.print_status("Private key stored in 1Password", True, 2)
+                        else:
+                            self.print_status("Failed to store private key in 1Password", False, 2)
             else:
-                print(f"Generating new SSH key '{self.ssh_key}'...")
+                self.print_status(f"Generating new SSH key '{self.ssh_key}'...", None, 2)
                 subprocess.run([
                     'ssh-keygen',
                     '-t', 'ed25519',
                     '-f', str(self.ssh_key_file),
                     '-N', ''  # Empty passphrase
                 ], check=True)
+                self.print_status("SSH key generated", True, 2)
                 
                 self.using_1password = input("Would you like to use 1Password SSH agent? (y/N): ").lower() == 'y'
-                if not self.using_1password:
+                if self.using_1password:
+                    self.print_status("Using 1Password SSH agent", True, 2)
+                else:
                     store_in_1password = input("Would you like to store the private key in 1Password? (y/N): ").lower() == 'y'
                     if store_in_1password:
-                        self._store_key_in_1password()
+                        if self._store_key_in_1password():
+                            self.print_status("Private key stored in 1Password", True, 2)
+                        else:
+                            self.print_status("Failed to store private key in 1Password", False, 2)
             
             return True
 
         except Exception as e:
-            print(f"Error setting up SSH key: {e}")
+            self.print_status(f"Error: {str(e)}", False, 2)
+            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            if continue_setup:
+                self.print_status("Continuing setup despite SSH key issues", None, 2)
+                return True
             return False
 
     def _store_key_in_1password(self) -> bool:
@@ -167,6 +221,8 @@ class CloudXSetup:
         Returns:
             bool: True if config was set up successfully
         """
+        self.print_status("Setting up SSH configuration...")
+        
         try:
             # Check if we need to create base config
             need_base_config = True
@@ -175,8 +231,10 @@ class CloudXSetup:
                 # Check if configuration for this environment already exists
                 if f"Host cloudx-{cloudx_env}-*" in current_config:
                     need_base_config = False
+                    self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
             
             if need_base_config:
+                self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
                 # Build ProxyCommand with all necessary parameters
                 proxy_command = f"uvx cloudx-proxy connect %h %p --profile {self.profile}"
                 if self.aws_env:
@@ -208,14 +266,17 @@ Host cloudx-{cloudx_env}-*
                         f.write("\n" + base_config)
                 else:
                     self.ssh_config_file.write_text(base_config)
+                self.print_status("Base configuration created", True, 2)
 
             # Add specific host entry
+            self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
             host_entry = f"""
 Host cloudx-{cloudx_env}-{hostname}
     HostName {instance_id}
 """
             with open(self.ssh_config_file, 'a') as f:
                 f.write(host_entry)
+            self.print_status("Host entry added", True, 2)
 
             # Ensure main SSH config includes our config
             main_config = Path(self.home_dir) / ".ssh" / "config"
@@ -226,18 +287,26 @@ Host cloudx-{cloudx_env}-{hostname}
                 if include_line not in content:
                     with open(main_config, 'a') as f:
                         f.write(f"\n{include_line}")
+                    self.print_status("Added include line to main SSH config", True, 2)
+                else:
+                    self.print_status("Main SSH config already includes our config", True, 2)
             else:
                 main_config.write_text(include_line)
+                self.print_status("Created main SSH config with include line", True, 2)
 
-            print(f"\nSSH configuration has been set up:")
-            print(f"- Main config file: {main_config}")
-            print(f"- CloudX config file: {self.ssh_config_file}")
-            print(f"\nYou can now connect using: ssh cloudx-{cloudx_env}-{hostname}")
+            self.print_status("\nSSH configuration summary:", None)
+            self.print_status(f"Main config: {main_config}", None, 2)
+            self.print_status(f"CloudX config: {self.ssh_config_file}", None, 2)
+            self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
             
             return True
 
         except Exception as e:
-            print(f"Error setting up SSH config: {e}")
+            self.print_status(f"Error: {str(e)}", False, 2)
+            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            if continue_setup:
+                self.print_status("Continuing setup despite SSH config issues", None, 2)
+                return True
             return False
 
     def check_instance_setup(self, instance_id: str) -> Tuple[bool, bool]:
@@ -304,33 +373,44 @@ Host cloudx-{cloudx_env}-{hostname}
         Returns:
             bool: True if setup completed successfully
         """
-        print(f"Checking setup status for instance {instance_id}...")
+        self.print_status(f"Checking instance {instance_id} setup status...")
         
         is_running, is_complete = self.check_instance_setup(instance_id)
         
         if not is_running:
-            print("Error: Instance is not running or not accessible via SSM")
+            self.print_status("Instance is not running or not accessible via SSM", False, 2)
+            continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+            if continue_setup:
+                self.print_status("Continuing setup despite instance access issues", None, 2)
+                return True
             return False
         
         if is_complete:
-            print("Instance setup is already complete")
+            self.print_status("Instance setup is complete", True, 2)
             return True
         
         wait = input("Instance setup is not complete. Would you like to wait? (Y/n): ").lower() != 'n'
         if not wait:
-            return False
+            self.print_status("Skipping instance setup check", None, 2)
+            return True
         
-        print("Waiting for setup to complete", end='', flush=True)
+        self.print_status("Waiting for setup to complete...", None, 2)
+        dots = 0
         while True:
             is_running, is_complete = self.check_instance_setup(instance_id)
             
             if not is_running:
-                print("\nError: Instance is no longer running or accessible")
+                self.print_status("Instance is no longer running or accessible", False, 2)
+                continue_setup = input("Would you like to continue anyway? (Y/n): ").lower() != 'n'
+                if continue_setup:
+                    self.print_status("Continuing setup despite instance issues", None, 2)
+                    return True
                 return False
             
             if is_complete:
-                print("\nInstance setup completed successfully")
+                self.print_status("Instance setup completed successfully", True, 2)
                 return True
             
-            print(".", end='', flush=True)
+            dots = (dots + 1) % 4
+            print(f"\r  {'.' * dots}{' ' * (3 - dots)}", end='', flush=True)
             time.sleep(10)
