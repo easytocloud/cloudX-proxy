@@ -373,7 +373,8 @@ Host cloudx-{cloudx_env}-{hostname}
             
             # First check if instance exists and its power state
             try:
-                response = ec2.describe_instances(InstanceIds=[instance_id])
+                # Use the provided profile for EC2 operations
+                response = session.client('ec2').describe_instances(InstanceIds=[instance_id])
                 if not response['Reservations']:
                     self.print_status("Instance not found", False, 4)
                     return False, False, False
@@ -472,9 +473,9 @@ Host cloudx-{cloudx_env}-{hostname}
                 return False
             
             try:
+                # Use the provided profile for EC2 operations
                 session = boto3.Session(profile_name=self.profile)
-                ec2 = session.client('ec2')
-                ec2.start_instances(InstanceIds=[instance_id])
+                session.client('ec2').start_instances(InstanceIds=[instance_id])
                 self.print_status("Instance start requested. This may take a few minutes...", None, 2)
                 
                 # Wait for instance to start
