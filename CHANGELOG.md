@@ -1,3 +1,10 @@
+## [0.3.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.9...v0.3.10) (2025-02-11)
+
+
+### Bug Fixes
+
+* remove AWS api calls in favour of ssh ([c3430ea](https://github.com/easytocloud/cloudX-proxy/commit/c3430ea0146c8b814f453dda8db5a5a5db975e09))
+
 ## [0.3.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.8...v0.3.9) (2025-02-11)
 
 
