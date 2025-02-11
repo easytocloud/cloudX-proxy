@@ -24,7 +24,6 @@ class CloudXSetup:
         self.ssh_dir = Path(self.home_dir) / ".ssh" / "vscode"
         self.ssh_config_file = self.ssh_dir / "config"
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
-        self.using_1password = False
         self.default_env = None
 
     def print_header(self, text: str) -> None:
@@ -143,17 +142,6 @@ class CloudXSetup:
             
             if key_exists:
                 self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
-                if platform.system() != 'Windows':
-                    self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
-                    if self.using_1password:
-                        self.print_status("Using 1Password SSH agent", True, 2)
-                    else:
-                        store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
-                        if store_in_1password:
-                            if self._store_key_in_1password():
-                                self.print_status("Private key stored in 1Password", True, 2)
-                            else:
-                                self.print_status("Failed to store private key in 1Password", False, 2)
             else:
                 self.print_status(f"Generating new SSH key '{self.ssh_key}'...", None, 2)
                 subprocess.run([
@@ -164,17 +152,6 @@ class CloudXSetup:
                 ], check=True)
                 self.print_status("SSH key generated", True, 2)
                 
-                if platform.system() != 'Windows':
-                    self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
-                    if self.using_1password:
-                        self.print_status("Using 1Password SSH agent", True, 2)
-                    else:
-                        store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
-                        if store_in_1password:
-                            if self._store_key_in_1password():
-                                self.print_status("Private key stored in 1Password", True, 2)
-                            else:
-                                self.print_status("Failed to store private key in 1Password", False, 2)
             
             return True
 
@@ -184,44 +161,6 @@ class CloudXSetup:
             if continue_setup:
                 self.print_status("Continuing setup despite SSH key issues", None, 2)
                 return True
-            return False
-
-    def _store_key_in_1password(self) -> bool:
-        """Store SSH private key in 1Password.
-        
-        Returns:
-            bool: True if key was stored successfully
-        """
-        try:
-            # Check if 1Password CLI is available
-            subprocess.run(['op', '--version'], check=True, capture_output=True)
-            
-            # Check if 1Password SSH agent is running
-            agent_sock = Path.home() / ".1password" / "agent.sock"
-            if platform.system() == 'Darwin':
-                agent_sock = Path.home() / "Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
-            
-            if not agent_sock.exists():
-                self.print_status("1Password SSH agent not running. Please enable it in 1Password settings.", False, 2)
-                return False
-            
-            # Read private key content
-            with open(self.ssh_key_file, 'r') as f:
-                private_key = f.read()
-            
-            # Store private key in 1Password as document
-            subprocess.run([
-                'op', 'document', 'create',
-                '--title', f'cloudx-proxy SSH Key - {self.ssh_key}',
-            ], input=private_key.encode(), check=True)
-            
-            # Remove private key file but keep public key
-            os.remove(self.ssh_key_file)
-            self.print_status("Private key stored in 1Password and removed from disk", True, 2)
-            self.print_status("Please import the key into 1Password SSH agent through the desktop app", True, 2)
-            return True
-        except subprocess.CalledProcessError:
-            print("Error: 1Password CLI not installed or not signed in.")
             return False
 
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
@@ -251,18 +190,7 @@ Host cloudx-{cloudx_env}-{hostname}
     HostName {instance_id}
     User ec2-user
 """
-            if self.using_1password and platform.system() != 'Windows':
-                # Use platform-specific agent socket path
-                if platform.system() == 'Darwin':  # macOS
-                    agent_sock = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
-                else:  # Linux
-                    agent_sock = "~/.1password/agent.sock"
-                host_entry += f"""    IdentityAgent {agent_sock}
-    IdentityFile {self.ssh_key_file}.pub
-    IdentitiesOnly yes
-"""
-            else:
-                host_entry += f"""    IdentityFile {self.ssh_key_file}
+            host_entry += f"""    IdentityFile {self.ssh_key_file}
     IdentitiesOnly yes
 """
             host_entry += f"""    ProxyCommand {proxy_command}
@@ -372,19 +300,7 @@ Host cloudx-{cloudx_env}-*
     User ec2-user
 """
             # Add key configuration
-            if self.using_1password and platform.system() != 'Windows':
-                # Use platform-specific agent socket path
-                if platform.system() == 'Darwin':  # macOS
-                    agent_sock = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
-                else:  # Linux
-                    agent_sock = "~/.1password/agent.sock"
-                base_config += f"""    IdentityAgent {agent_sock}
-    IdentityFile {self.ssh_key_file}.pub
-    IdentitiesOnly yes
-
-"""
-            else:
-                base_config += f"""    IdentityFile {self.ssh_key_file}
+            base_config += f"""    IdentityFile {self.ssh_key_file}
     IdentitiesOnly yes
 
 """
@@ -441,71 +357,93 @@ Host cloudx-{cloudx_env}-{hostname}
                 return True
             return False
 
-    def check_instance_setup(self, instance_id: str) -> Tuple[bool, bool]:
+    def check_instance_setup(self, instance_id: str) -> Tuple[bool, bool, bool]:
         """Check if instance setup is complete.
         
         Args:
             instance_id: EC2 instance ID
         
         Returns:
-            Tuple[bool, bool]: (is_running, is_setup_complete)
+            Tuple[bool, bool, bool]: (ssm_accessible, is_running, is_setup_complete)
         """
         try:
             session = boto3.Session(profile_name=self.profile)
             ssm = session.client('ssm')
+            ec2 = session.client('ec2')
             
-            # Check if instance is online in SSM
-            self.print_status("Checking instance status in SSM...", None, 4)
-            response = ssm.describe_instance_information(
-                Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
-            )
-            is_running = bool(response['InstanceInformationList'])
+            # First check if instance exists and its power state
+            try:
+                response = ec2.describe_instances(InstanceIds=[instance_id])
+                if not response['Reservations']:
+                    self.print_status("Instance not found", False, 4)
+                    return False, False, False
+                
+                instance = response['Reservations'][0]['Instances'][0]
+                state = instance['State']['Name']
+                
+                if state != 'running':
+                    self.print_status(f"Instance is {state}", False, 4)
+                    return True, False, False
+            except Exception as e:
+                self.print_status(f"Error checking instance state: {e}", False, 4)
+                return False, False, False
             
-            if not is_running:
-                self.print_status("Instance is not accessible via SSM", False, 4)
-                return False, False
-            
-            self.print_status("Instance is accessible via SSM", True, 4)
-            
-            # Check setup status using SSM command
-            self.print_status("Checking setup status...", None, 4)
-            response = ssm.send_command(
-                InstanceIds=[instance_id],
-                DocumentName='AWS-RunShellScript',
-                Parameters={
-                    'commands': [
-                        'test -f /home/ec2-user/.install-done && echo "DONE" || '
-                        'test -f /home/ec2-user/.install-running && echo "RUNNING" || '
-                        'echo "NOT_STARTED"'
-                    ]
-                }
-            )
-            
-            command_id = response['Command']['CommandId']
-            
-            # Wait for command completion
-            for _ in range(10):  # 10 second timeout
-                time.sleep(1)
-                result = ssm.get_command_invocation(
-                    CommandId=command_id,
-                    InstanceId=instance_id
+            # Now check SSM connectivity
+            try:
+                self.print_status("Checking SSM connectivity...", None, 4)
+                response = ssm.describe_instance_information(
+                    Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
                 )
-                if result['Status'] in ['Success', 'Failed']:
-                    break
-            
-            is_setup_complete = result['Status'] == 'Success' and result['StandardOutputContent'].strip() == 'DONE'
-            
-            if is_setup_complete:
-                self.print_status("Setup is complete", True, 4)
-            else:
-                status = result['StandardOutputContent'].strip()
-                self.print_status(f"Setup status: {status}", None, 4)
-            
-            return True, is_setup_complete
+                if not response['InstanceInformationList']:
+                    self.print_status("Instance is running but not yet accessible via SSM", False, 4)
+                    self.print_status("This is normal if the instance is still configuring", None, 4)
+                    return True, True, False
+                
+                self.print_status("SSM connection established", True, 4)
+                
+                # Check setup status using SSM command
+                self.print_status("Checking setup status...", None, 4)
+                response = ssm.send_command(
+                    InstanceIds=[instance_id],
+                    DocumentName='AWS-RunShellScript',
+                    Parameters={
+                        'commands': [
+                            'test -f /home/ec2-user/.install-done && echo "DONE" || '
+                            'test -f /home/ec2-user/.install-running && echo "RUNNING" || '
+                            'echo "NOT_STARTED"'
+                        ]
+                    }
+                )
+                
+                command_id = response['Command']['CommandId']
+                
+                # Wait for command completion
+                for _ in range(10):  # 10 second timeout
+                    time.sleep(1)
+                    result = ssm.get_command_invocation(
+                        CommandId=command_id,
+                        InstanceId=instance_id
+                    )
+                    if result['Status'] in ['Success', 'Failed']:
+                        break
+                
+                is_setup_complete = result['Status'] == 'Success' and result['StandardOutputContent'].strip() == 'DONE'
+                
+                if is_setup_complete:
+                    self.print_status("Setup is complete", True, 4)
+                else:
+                    status = result['StandardOutputContent'].strip()
+                    self.print_status(f"Setup status: {status}", None, 4)
+                
+                return True, True, is_setup_complete
+                
+            except Exception as e:
+                self.print_status(f"Error checking SSM status: {e}", False, 4)
+                return False, True, False
 
         except Exception as e:
             self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 4)
-            return False, False
+            return False, False, False
 
     def wait_for_setup_completion(self, instance_id: str) -> bool:
         """Wait for instance setup to complete.
@@ -514,24 +452,65 @@ Host cloudx-{cloudx_env}-{hostname}
             instance_id: EC2 instance ID
         
         Returns:
-            bool: True if setup completed successfully
+            bool: True if setup completed successfully or user chose to continue
         """
         self.print_header("Instance Setup Check")
-        self.print_status(f"Checking instance {instance_id} setup status...")
+        self.print_status(f"Checking instance {instance_id} status...")
         
-        is_running, is_complete = self.check_instance_setup(instance_id)
+        ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
         
-        if not is_running:
-            self.print_status("Instance is not running or not accessible via SSM", False, 2)
+        if not ssm_accessible and not is_running:
             continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite instance access issues", None, 2)
                 return True
             return False
         
+        if not is_running:
+            start_instance = self.prompt("Would you like to start the instance?", "Y").lower() != 'n'
+            if not start_instance:
+                return False
+            
+            try:
+                session = boto3.Session(profile_name=self.profile)
+                ec2 = session.client('ec2')
+                ec2.start_instances(InstanceIds=[instance_id])
+                self.print_status("Instance start requested. This may take a few minutes...", None, 2)
+                
+                # Wait for instance to start
+                for _ in range(30):  # 5 minute timeout
+                    time.sleep(10)
+                    ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
+                    if is_running:
+                        break
+                
+                if not is_running:
+                    self.print_status("Timeout waiting for instance to start", False, 2)
+                    return False
+            except Exception as e:
+                self.print_status(f"Error starting instance: {e}", False, 2)
+                return False
+        
         if is_complete:
             self.print_status("Instance setup is complete", True, 2)
             return True
+        
+        if not ssm_accessible:
+            self.print_status("Waiting for SSM access...", None, 2)
+            # Wait for SSM access
+            for _ in range(30):  # 5 minute timeout
+                time.sleep(10)
+                ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
+                if ssm_accessible or not is_running:
+                    break
+            
+            if not ssm_accessible:
+                self.print_status("Timeout waiting for SSM access", False, 2)
+                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
+                if continue_setup:
+                    self.print_status("Continuing setup despite SSM access issues", None, 2)
+                    return True
+                return False
         
         wait = self.prompt("Instance setup is not complete. Would you like to wait?", "Y").lower() != 'n'
         if not wait:
@@ -541,13 +520,21 @@ Host cloudx-{cloudx_env}-{hostname}
         self.print_status("Waiting for setup to complete...", None, 2)
         dots = 0
         while True:
-            is_running, is_complete = self.check_instance_setup(instance_id)
+            ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
             
             if not is_running:
-                self.print_status("Instance is no longer running or accessible", False, 2)
+                self.print_status("Instance is no longer running", False, 2)
                 continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
                 if continue_setup:
                     self.print_status("Continuing setup despite instance issues", None, 2)
+                    return True
+                return False
+            
+            if not ssm_accessible:
+                self.print_status("Lost SSM access to instance", False, 2)
+                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
+                if continue_setup:
+                    self.print_status("Continuing setup despite SSM access issues", None, 2)
                     return True
                 return False
             
