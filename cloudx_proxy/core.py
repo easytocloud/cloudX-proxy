@@ -5,7 +5,7 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 
-class CloudXClient:
+class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode", 
                  region: str = None, ssh_key: str = "vscode", aws_env: str = None):
         """Initialize CloudX client for SSH tunneling via AWS SSM.

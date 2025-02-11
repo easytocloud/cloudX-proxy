@@ -2,13 +2,13 @@ import os
 import sys
 import click
 from . import __version__
-from .core import CloudXClient
+from .core import CloudXProxy
 from .setup import CloudXSetup
 
 @click.group()
 @click.version_option(version=__version__)
 def cli():
-    """CloudX Client - Connect to EC2 instances via SSM for VSCode Remote SSH."""
+    """cloudx-proxy - SSH proxy to connect VSCode Remote SSH to EC2 instances using SSM."""
     pass
 
 @cli.command()
@@ -29,7 +29,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
         cloudx-proxy i-0123456789abcdef0 22 --aws-env prod
     """
     try:
-        client = CloudXClient(
+        client = CloudXProxy(
             instance_id=instance_id,
             port=port,
             profile=profile,
