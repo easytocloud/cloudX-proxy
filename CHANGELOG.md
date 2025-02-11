@@ -1,3 +1,10 @@
+## [0.3.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.6...v0.3.7) (2025-02-11)
+
+
+### Bug Fixes
+
+* removed 1Password support and improved instance monitoring ([c01009a](https://github.com/easytocloud/cloudX-proxy/commit/c01009afb6d90f43768dece909351a8c3ca597ce))
+
 ## [0.3.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.5...v0.3.6) (2025-02-11)
 
 
