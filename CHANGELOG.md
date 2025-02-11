@@ -1,3 +1,10 @@
+## [0.3.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.8...v0.3.9) (2025-02-11)
+
+
+### Bug Fixes
+
+* use ssm for ec2 operations ([e227818](https://github.com/easytocloud/cloudX-proxy/commit/e2278184b443c4051aa355745985543757d980a3))
+
 ## [0.3.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.7...v0.3.8) (2025-02-11)
 
 
