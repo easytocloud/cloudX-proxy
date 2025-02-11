@@ -1,3 +1,10 @@
+## [0.3.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.7...v0.3.8) (2025-02-11)
+
+
+### Bug Fixes
+
+* profile use for ec2 operations ([3b0c23f](https://github.com/easytocloud/cloudX-proxy/commit/3b0c23f6e6fd2b782ed3e17a8606133435d8f676))
+
 ## [0.3.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.6...v0.3.7) (2025-02-11)
 
 
