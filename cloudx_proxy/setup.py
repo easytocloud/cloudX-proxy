@@ -371,36 +371,26 @@ Host cloudx-{cloudx_env}-{hostname}
             ssm = session.client('ssm')
             ec2 = session.client('ec2')
             
-            # First check if instance exists and its power state
-            try:
-                # Use the provided profile for EC2 operations
-                response = session.client('ec2').describe_instances(InstanceIds=[instance_id])
-                if not response['Reservations']:
-                    self.print_status("Instance not found", False, 4)
-                    return False, False, False
-                
-                instance = response['Reservations'][0]['Instances'][0]
-                state = instance['State']['Name']
-                
-                if state != 'running':
-                    self.print_status(f"Instance is {state}", False, 4)
-                    return True, False, False
-            except Exception as e:
-                self.print_status(f"Error checking instance state: {e}", False, 4)
-                return False, False, False
-            
-            # Now check SSM connectivity
+            # Check instance status via SSM
             try:
                 self.print_status("Checking SSM connectivity...", None, 4)
                 response = ssm.describe_instance_information(
                     Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
                 )
-                if not response['InstanceInformationList']:
-                    self.print_status("Instance is running but not yet accessible via SSM", False, 4)
-                    self.print_status("This is normal if the instance is still configuring", None, 4)
-                    return True, True, False
+                instance_info = response['InstanceInformationList']
+                if not instance_info:
+                    self.print_status("Instance not accessible via SSM", False, 4)
+                    self.print_status("This could mean the instance is stopped or still configuring", None, 4)
+                    return True, False, False
                 
-                self.print_status("SSM connection established", True, 4)
+                # Check instance status from SSM
+                instance = instance_info[0]
+                ping_status = instance.get('PingStatus', '')
+                if ping_status != 'Online':
+                    self.print_status(f"Instance SSM status: {ping_status}", False, 4)
+                    return True, False, False
+                
+                self.print_status("Instance is running and SSM connection established", True, 4)
                 
                 # Check setup status using SSM command
                 self.print_status("Checking setup status...", None, 4)
@@ -472,25 +462,9 @@ Host cloudx-{cloudx_env}-{hostname}
             if not start_instance:
                 return False
             
-            try:
-                # Use the provided profile for EC2 operations
-                session = boto3.Session(profile_name=self.profile)
-                session.client('ec2').start_instances(InstanceIds=[instance_id])
-                self.print_status("Instance start requested. This may take a few minutes...", None, 2)
-                
-                # Wait for instance to start
-                for _ in range(30):  # 5 minute timeout
-                    time.sleep(10)
-                    ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
-                    if is_running:
-                        break
-                
-                if not is_running:
-                    self.print_status("Timeout waiting for instance to start", False, 2)
-                    return False
-            except Exception as e:
-                self.print_status(f"Error starting instance: {e}", False, 2)
-                return False
+            self.print_status("Cannot directly start the instance. Please start it through the appropriate channels.", False, 2)
+            self.print_status("Once started, run this command again to configure SSH access.", None, 2)
+            return False
         
         if is_complete:
             self.print_status("Instance setup is complete", True, 2)
