@@ -187,7 +187,7 @@ class CloudXSetup:
             return False
 
     def _store_key_in_1password(self) -> bool:
-        """Store SSH private key in 1Password and configure SSH agent.
+        """Store SSH private key in 1Password.
         
         Returns:
             bool: True if key was stored successfully
@@ -205,33 +205,21 @@ class CloudXSetup:
                 self.print_status("1Password SSH agent not running. Please enable it in 1Password settings.", False, 2)
                 return False
             
-            print("Adding SSH key to 1Password SSH agent...")
-            try:
-                # First try to add to SSH agent
-                subprocess.run([
-                    'op', 'ssh-add',
-                    '--name', f'cloudx-proxy-{self.ssh_key}',
-                    str(self.ssh_key_file)
-                ], check=True)
-                
-                # Read private key content before removing
-                with open(self.ssh_key_file, 'r') as f:
-                    private_key = f.read()
-                
-                # Store private key in 1Password as document for backup
-                subprocess.run([
-                    'op', 'document', 'create',
-                    '--title', f'cloudx-proxy SSH Key - {self.ssh_key}',
-                ], input=private_key.encode(), check=True)
-                
-                # Remove private key file but keep public key
-                os.remove(self.ssh_key_file)
-                self.print_status("Private key added to 1Password SSH agent and removed from disk", True, 2)
-                self.print_status("Backup copy stored in 1Password documents", True, 2)
-                return True
-            except subprocess.CalledProcessError as e:
-                self.print_status(f"Failed to add key to SSH agent: {e}", False, 2)
-                return False
+            # Read private key content
+            with open(self.ssh_key_file, 'r') as f:
+                private_key = f.read()
+            
+            # Store private key in 1Password as document
+            subprocess.run([
+                'op', 'document', 'create',
+                '--title', f'cloudx-proxy SSH Key - {self.ssh_key}',
+            ], input=private_key.encode(), check=True)
+            
+            # Remove private key file but keep public key
+            os.remove(self.ssh_key_file)
+            self.print_status("Private key stored in 1Password and removed from disk", True, 2)
+            self.print_status("Please import the key into 1Password SSH agent through the desktop app", True, 2)
+            return True
         except subprocess.CalledProcessError:
             print("Error: 1Password CLI not installed or not signed in.")
             return False
