@@ -2,6 +2,7 @@ import os
 import time
 import json
 import subprocess
+import platform
 from pathlib import Path
 from typing import Optional, Tuple
 import boto3
@@ -142,16 +143,17 @@ class CloudXSetup:
             
             if key_exists:
                 self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
-                self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
-                if self.using_1password:
-                    self.print_status("Using 1Password SSH agent", True, 2)
-                else:
-                    store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
-                    if store_in_1password:
-                        if self._store_key_in_1password():
-                            self.print_status("Private key stored in 1Password", True, 2)
-                        else:
-                            self.print_status("Failed to store private key in 1Password", False, 2)
+                if platform.system() != 'Windows':
+                    self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
+                    if self.using_1password:
+                        self.print_status("Using 1Password SSH agent", True, 2)
+                    else:
+                        store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
+                        if store_in_1password:
+                            if self._store_key_in_1password():
+                                self.print_status("Private key stored in 1Password", True, 2)
+                            else:
+                                self.print_status("Failed to store private key in 1Password", False, 2)
             else:
                 self.print_status(f"Generating new SSH key '{self.ssh_key}'...", None, 2)
                 subprocess.run([
@@ -162,16 +164,17 @@ class CloudXSetup:
                 ], check=True)
                 self.print_status("SSH key generated", True, 2)
                 
-                self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
-                if self.using_1password:
-                    self.print_status("Using 1Password SSH agent", True, 2)
-                else:
-                    store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
-                    if store_in_1password:
-                        if self._store_key_in_1password():
-                            self.print_status("Private key stored in 1Password", True, 2)
-                        else:
-                            self.print_status("Failed to store private key in 1Password", False, 2)
+                if platform.system() != 'Windows':
+                    self.using_1password = self.prompt("Would you like to use 1Password SSH agent?", "N").lower() == 'y'
+                    if self.using_1password:
+                        self.print_status("Using 1Password SSH agent", True, 2)
+                    else:
+                        store_in_1password = self.prompt("Would you like to store the private key in 1Password?", "N").lower() == 'y'
+                        if store_in_1password:
+                            if self._store_key_in_1password():
+                                self.print_status("Private key stored in 1Password", True, 2)
+                            else:
+                                self.print_status("Failed to store private key in 1Password", False, 2)
             
             return True
 
@@ -184,20 +187,51 @@ class CloudXSetup:
             return False
 
     def _store_key_in_1password(self) -> bool:
-        """Store SSH private key in 1Password.
+        """Store SSH private key in 1Password and configure SSH agent.
         
         Returns:
             bool: True if key was stored successfully
         """
         try:
+            # Check if 1Password CLI is available
             subprocess.run(['op', '--version'], check=True, capture_output=True)
-            print("Storing private key in 1Password...")
-            subprocess.run([
-                'op', 'document', 'create',
-                str(self.ssh_key_file),
-                '--title', f'cloudx-proxy SSH Key - {self.ssh_key}'
-            ], check=True)
-            return True
+            
+            # Check if 1Password SSH agent is running
+            agent_sock = Path.home() / ".1password" / "agent.sock"
+            if platform.system() == 'Darwin':
+                agent_sock = Path.home() / "Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+            
+            if not agent_sock.exists():
+                self.print_status("1Password SSH agent not running. Please enable it in 1Password settings.", False, 2)
+                return False
+            
+            print("Adding SSH key to 1Password SSH agent...")
+            try:
+                # First try to add to SSH agent
+                subprocess.run([
+                    'op', 'ssh-add',
+                    '--name', f'cloudx-proxy-{self.ssh_key}',
+                    str(self.ssh_key_file)
+                ], check=True)
+                
+                # Read private key content before removing
+                with open(self.ssh_key_file, 'r') as f:
+                    private_key = f.read()
+                
+                # Store private key in 1Password as document for backup
+                subprocess.run([
+                    'op', 'document', 'create',
+                    '--title', f'cloudx-proxy SSH Key - {self.ssh_key}',
+                ], input=private_key.encode(), check=True)
+                
+                # Remove private key file but keep public key
+                os.remove(self.ssh_key_file)
+                self.print_status("Private key added to 1Password SSH agent and removed from disk", True, 2)
+                self.print_status("Backup copy stored in 1Password documents", True, 2)
+                return True
+            except subprocess.CalledProcessError as e:
+                self.print_status(f"Failed to add key to SSH agent: {e}", False, 2)
+                return False
         except subprocess.CalledProcessError:
             print("Error: 1Password CLI not installed or not signed in.")
             return False
@@ -229,13 +263,19 @@ Host cloudx-{cloudx_env}-{hostname}
     HostName {instance_id}
     User ec2-user
 """
-            if self.using_1password:
-                host_entry += f"""    IdentityAgent ~/.1password/agent.sock
+            if self.using_1password and platform.system() != 'Windows':
+                # Use platform-specific agent socket path
+                if platform.system() == 'Darwin':  # macOS
+                    agent_sock = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+                else:  # Linux
+                    agent_sock = "~/.1password/agent.sock"
+                host_entry += f"""    IdentityAgent {agent_sock}
     IdentityFile {self.ssh_key_file}.pub
     IdentitiesOnly yes
 """
             else:
                 host_entry += f"""    IdentityFile {self.ssh_key_file}
+    IdentitiesOnly yes
 """
             host_entry += f"""    ProxyCommand {proxy_command}
 """
@@ -343,14 +383,22 @@ Host cloudx-{cloudx_env}-{hostname}
 Host cloudx-{cloudx_env}-*
     User ec2-user
 """
-            # Add 1Password or standard key configuration
-            if self.using_1password:
-                base_config += f"""    IdentityAgent ~/.1password/agent.sock
+            # Add key configuration
+            if self.using_1password and platform.system() != 'Windows':
+                # Use platform-specific agent socket path
+                if platform.system() == 'Darwin':  # macOS
+                    agent_sock = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+                else:  # Linux
+                    agent_sock = "~/.1password/agent.sock"
+                base_config += f"""    IdentityAgent {agent_sock}
     IdentityFile {self.ssh_key_file}.pub
     IdentitiesOnly yes
+
 """
             else:
                 base_config += f"""    IdentityFile {self.ssh_key_file}
+    IdentitiesOnly yes
+
 """
             # Add ProxyCommand
             base_config += f"""    ProxyCommand {proxy_command}
