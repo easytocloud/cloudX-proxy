@@ -357,166 +357,87 @@ Host cloudx-{cloudx_env}-{hostname}
                 return True
             return False
 
-    def check_instance_setup(self, instance_id: str) -> Tuple[bool, bool, bool]:
-        """Check if instance setup is complete.
+    def check_instance_setup(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
+        """Check if instance is accessible via SSH.
         
         Args:
             instance_id: EC2 instance ID
+            hostname: Hostname for the instance
+            cloudx_env: CloudX environment
         
         Returns:
-            Tuple[bool, bool, bool]: (ssm_accessible, is_running, is_setup_complete)
+            bool: True if instance is accessible
         """
+        ssh_host = f"cloudx-{cloudx_env}-{hostname}"
+        self.print_status(f"Checking SSH connection to {ssh_host}...", None, 4)
+        
         try:
-            session = boto3.Session(profile_name=self.profile)
-            ssm = session.client('ssm')
-            ec2 = session.client('ec2')
+            # Try to connect with a simple command that will exit immediately
+            result = subprocess.run(
+                ['ssh', ssh_host, 'exit'],
+                capture_output=True,
+                text=True,
+                timeout=10  # 10 second timeout
+            )
             
-            # Check instance status via SSM
-            try:
-                self.print_status("Checking SSM connectivity...", None, 4)
-                response = ssm.describe_instance_information(
-                    Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
-                )
-                instance_info = response['InstanceInformationList']
-                if not instance_info:
-                    self.print_status("Instance not accessible via SSM", False, 4)
-                    self.print_status("This could mean the instance is stopped or still configuring", None, 4)
-                    return True, False, False
-                
-                # Check instance status from SSM
-                instance = instance_info[0]
-                ping_status = instance.get('PingStatus', '')
-                if ping_status != 'Online':
-                    self.print_status(f"Instance SSM status: {ping_status}", False, 4)
-                    return True, False, False
-                
-                self.print_status("Instance is running and SSM connection established", True, 4)
-                
-                # Check setup status using SSM command
-                self.print_status("Checking setup status...", None, 4)
-                response = ssm.send_command(
-                    InstanceIds=[instance_id],
-                    DocumentName='AWS-RunShellScript',
-                    Parameters={
-                        'commands': [
-                            'test -f /home/ec2-user/.install-done && echo "DONE" || '
-                            'test -f /home/ec2-user/.install-running && echo "RUNNING" || '
-                            'echo "NOT_STARTED"'
-                        ]
-                    }
-                )
-                
-                command_id = response['Command']['CommandId']
-                
-                # Wait for command completion
-                for _ in range(10):  # 10 second timeout
-                    time.sleep(1)
-                    result = ssm.get_command_invocation(
-                        CommandId=command_id,
-                        InstanceId=instance_id
-                    )
-                    if result['Status'] in ['Success', 'Failed']:
-                        break
-                
-                is_setup_complete = result['Status'] == 'Success' and result['StandardOutputContent'].strip() == 'DONE'
-                
-                if is_setup_complete:
-                    self.print_status("Setup is complete", True, 4)
+            if result.returncode == 0:
+                self.print_status("SSH connection successful", True, 4)
+                return True
+            else:
+                self.print_status("SSH connection failed", False, 4)
+                if "Connection refused" in result.stderr:
+                    self.print_status("Instance appears to be starting up. Please try again in a few minutes.", None, 4)
+                elif "Connection timed out" in result.stderr:
+                    self.print_status("Instance may be stopped. Please start it through the appropriate channels.", None, 4)
                 else:
-                    status = result['StandardOutputContent'].strip()
-                    self.print_status(f"Setup status: {status}", None, 4)
+                    self.print_status(f"Error: {result.stderr.strip()}", None, 4)
+                return False
                 
-                return True, True, is_setup_complete
-                
-            except Exception as e:
-                self.print_status(f"Error checking SSM status: {e}", False, 4)
-                return False, True, False
-
+        except subprocess.TimeoutExpired:
+            self.print_status("SSH connection timed out", False, 4)
+            self.print_status("Instance may be stopped or still starting up", None, 4)
+            return False
         except Exception as e:
-            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 4)
-            return False, False, False
+            self.print_status(f"Error checking SSH connection: {str(e)}", False, 4)
+            return False
 
-    def wait_for_setup_completion(self, instance_id: str) -> bool:
-        """Wait for instance setup to complete.
+    def wait_for_setup_completion(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
+        """Wait for instance to become accessible via SSH.
         
         Args:
             instance_id: EC2 instance ID
+            hostname: Hostname for the instance
+            cloudx_env: CloudX environment
         
         Returns:
-            bool: True if setup completed successfully or user chose to continue
+            bool: True if instance is accessible or user chose to continue
         """
-        self.print_header("Instance Setup Check")
-        self.print_status(f"Checking instance {instance_id} status...")
+        self.print_header("Instance Access Check")
         
-        ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
-        
-        if not ssm_accessible and not is_running:
-            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-            if continue_setup:
-                self.print_status("Continuing setup despite instance access issues", None, 2)
-                return True
-            return False
-        
-        if not is_running:
-            start_instance = self.prompt("Would you like to start the instance?", "Y").lower() != 'n'
-            if not start_instance:
-                return False
-            
-            self.print_status("Cannot directly start the instance. Please start it through the appropriate channels.", False, 2)
-            self.print_status("Once started, run this command again to configure SSH access.", None, 2)
-            return False
-        
-        if is_complete:
-            self.print_status("Instance setup is complete", True, 2)
+        if self.check_instance_setup(instance_id, hostname, cloudx_env):
             return True
-        
-        if not ssm_accessible:
-            self.print_status("Waiting for SSM access...", None, 2)
-            # Wait for SSM access
-            for _ in range(30):  # 5 minute timeout
-                time.sleep(10)
-                ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
-                if ssm_accessible or not is_running:
-                    break
             
-            if not ssm_accessible:
-                self.print_status("Timeout waiting for SSM access", False, 2)
-                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-                if continue_setup:
-                    self.print_status("Continuing setup despite SSM access issues", None, 2)
-                    return True
-                return False
-        
-        wait = self.prompt("Instance setup is not complete. Would you like to wait?", "Y").lower() != 'n'
+        wait = self.prompt("Would you like to wait for the instance to become accessible?", "Y").lower() != 'n'
         if not wait:
-            self.print_status("Skipping instance setup check", None, 2)
-            return True
+            return False
         
-        self.print_status("Waiting for setup to complete...", None, 2)
+        self.print_status("Waiting for SSH access...", None, 2)
         dots = 0
-        while True:
-            ssm_accessible, is_running, is_complete = self.check_instance_setup(instance_id)
-            
-            if not is_running:
-                self.print_status("Instance is no longer running", False, 2)
-                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-                if continue_setup:
-                    self.print_status("Continuing setup despite instance issues", None, 2)
-                    return True
-                return False
-            
-            if not ssm_accessible:
-                self.print_status("Lost SSM access to instance", False, 2)
-                continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-                if continue_setup:
-                    self.print_status("Continuing setup despite SSM access issues", None, 2)
-                    return True
-                return False
-            
-            if is_complete:
-                self.print_status("Instance setup completed successfully", True, 2)
+        attempts = 0
+        max_attempts = 30  # 5 minute timeout (10 seconds * 30)
+        
+        while attempts < max_attempts:
+            if self.check_instance_setup(instance_id, hostname, cloudx_env):
                 return True
             
             dots = (dots + 1) % 4
             print(f"\r  {'.' * dots}{' ' * (3 - dots)}", end='', flush=True)
             time.sleep(10)
+            attempts += 1
+        
+        self.print_status("Timeout waiting for SSH access", False, 2)
+        continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
+        if continue_setup:
+            self.print_status("Continuing setup despite SSH access issues", None, 2)
+            return True
+        return False
