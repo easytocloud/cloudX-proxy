@@ -1,3 +1,10 @@
+## [0.3.5](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.4...v0.3.5) (2025-02-11)
+
+
+### Bug Fixes
+
+* repaired 1Password integration and ssh perms ([69f6a24](https://github.com/easytocloud/cloudX-proxy/commit/69f6a249c941044c4dc689c787c12c1a0d0e093a))
+
 ## [0.3.4](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.3...v0.3.4) (2025-02-09)
 
 ## [0.3.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.2...v0.3.3) (2025-02-09)
