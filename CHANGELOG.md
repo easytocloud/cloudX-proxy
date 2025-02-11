@@ -1,3 +1,10 @@
+## [0.3.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.10...v0.3.11) (2025-02-11)
+
+
+### Bug Fixes
+
+* removed last references to client in favour of proxy ([cc19cf4](https://github.com/easytocloud/cloudX-proxy/commit/cc19cf4c951daf1bc1e5d69d945133e3d1448a07))
+
 ## [0.3.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.9...v0.3.10) (2025-02-11)
 
 
