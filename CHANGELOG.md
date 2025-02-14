@@ -1,3 +1,10 @@
+## [0.3.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.11...v0.3.12) (2025-02-14)
+
+
+### Bug Fixes
+
+* modified wait_for_setup_completion call ([a85be04](https://github.com/easytocloud/cloudX-proxy/commit/a85be04468a5fb3ea2e100c8fe854102df0dd030))
+
 ## [0.3.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.10...v0.3.11) (2025-02-11)
 
 
