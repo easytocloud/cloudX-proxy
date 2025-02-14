@@ -85,7 +85,8 @@ def setup(profile: str, ssh_key: str, aws_env: str):
             sys.exit(1)
         
         # Check instance setup status
-        setup.wait_for_setup_completion(instance_id)
+        if not setup.wait_for_setup_completion(instance_id, hostname, cloudx_env):
+            sys.exit(1)
         
     except Exception as e:
         print(f"\n\033[91mError: {str(e)}\033[0m", file=sys.stderr)
