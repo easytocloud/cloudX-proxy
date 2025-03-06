@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.15...v0.4.0) (2025-03-06)
+
+
+### Features
+
+* added 1password integration ([4ac2340](https://github.com/easytocloud/cloudX-proxy/commit/4ac2340d6174ded129482e0fcd91a9cef0ab136d))
+
 ## [0.3.15](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.14...v0.3.15) (2025-03-06)
 
 
