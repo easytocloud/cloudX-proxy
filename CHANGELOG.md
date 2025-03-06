@@ -1,3 +1,10 @@
+## [0.4.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.1...v0.4.2) (2025-03-06)
+
+
+### Bug Fixes
+
+* added _1password.py ([421a95f](https://github.com/easytocloud/cloudX-proxy/commit/421a95f867c2c2b6ee3eea220d06cf00a5c8228c))
+
 ## [0.4.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.0...v0.4.1) (2025-03-06)
 
 
