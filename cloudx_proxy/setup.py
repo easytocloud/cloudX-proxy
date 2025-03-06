@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
+from ._1password import check_1password_cli, check_ssh_agent, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
 
 class CloudXSetup:
     def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
@@ -166,107 +167,51 @@ class CloudXSetup:
             
         self.print_status("Checking 1Password availability...")
         
-        # Check if 1Password CLI is installed
-        try:
-            result = subprocess.run(
-                ['op', '--version'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if result.returncode != 0:
-                self.print_status("1Password CLI not found. Please install it from https://1password.com/downloads/command-line/", False, 2)
-                return False
-            
-            self.print_status(f"1Password CLI {result.stdout.strip()} installed", True, 2)
-            
-            # Check if 1Password SSH agent is running
-            agent_sock_exists = self.onepassword_agent_sock.exists()
-            if not agent_sock_exists:
-                self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
-                self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
-                return False
-                
-            self.print_status("1Password SSH agent socket found", True, 2)
-            
-            # Check if agent is active by trying to list identities
-            result = subprocess.run(
-                ['ssh-add', '-l'],
-                env={**os.environ, 'SSH_AUTH_SOCK': str(self.onepassword_agent_sock)},
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            
-            if "Could not open a connection to your authentication agent" in result.stderr:
-                self.print_status("1Password SSH agent is not running", False, 2)
-                return False
-                
-            self.print_status("1Password SSH agent is running", True, 2)
-            
-            # Check if 1Password CLI is authenticated
-            result = subprocess.run(
-                ['op', 'account', 'list'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            
-            if result.returncode != 0:
-                self.print_status("1Password CLI is not authenticated. Run 'op signin' first.", False, 2)
-                return False
-                
-            self.print_status("1Password CLI is authenticated", True, 2)
-            return True
-            
-        except FileNotFoundError:
+        # Use our helper function to check 1Password CLI
+        installed, authenticated, version = check_1password_cli()
+        
+        if not installed:
             self.print_status("1Password CLI not found. Please install it from https://1password.com/downloads/command-line/", False, 2)
             return False
-        except Exception as e:
-            self.print_status(f"Error checking 1Password: {str(e)}", False, 2)
+        
+        self.print_status(f"1Password CLI {version} installed", True, 2)
+        
+        if not authenticated:
+            self.print_status("1Password CLI is not authenticated. Run 'op signin' first.", False, 2)
             return False
+        
+        self.print_status("1Password CLI is authenticated", True, 2)
+        
+        # Check if 1Password SSH agent is running
+        agent_running = check_ssh_agent(str(self.onepassword_agent_sock))
+        
+        if not agent_running:
+            self.print_status("1Password SSH agent is not running", False, 2)
+            self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
+            return False
+        
+        self.print_status("1Password SSH agent is running", True, 2)
+        return True
 
-    def _store_key_in_1password(self) -> bool:
-        """Store the SSH key in 1Password and offer to remove it from the filesystem.
+    def _create_1password_key(self) -> bool:
+        """Create a new SSH key in 1Password.
         
         Returns:
             bool: True if successful
         """
         try:
-            # If key exists on filesystem, offer to store it in 1Password
-            key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
-            
-            if not key_exists:
-                self.print_status("No SSH key found to store in 1Password", False, 2)
-                return False
-                
-            # Ask if user wants to store the key in 1Password
-            store_in_1password = self.prompt("Would you like to store this SSH key in 1Password?", "Y").lower() == "y"
-            if not store_in_1password:
-                return True
-                
-            # Get vault to store the key in
-            result = subprocess.run(
-                ['op', 'vault', 'list', '--format=json'],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            
-            if result.returncode != 0:
-                self.print_status("Error listing 1Password vaults", False, 2)
-                return False
-                
-            vaults = json.loads(result.stdout)
+            # Get vaults to determine where to store the key
+            vaults = get_vaults()
             if not vaults:
                 self.print_status("No 1Password vaults found", False, 2)
                 return False
-                
+            
             # Display available vaults
+            self.print_status("Creating a new SSH key in 1Password", None, 2)
             print("\n\033[96mAvailable 1Password vaults:\033[0m")
             for i, vault in enumerate(vaults):
                 print(f"  {i+1}. {vault['name']}")
-                
+            
             # Let user select vault
             vault_num = self.prompt("Select vault number to store SSH key", "1")
             try:
@@ -278,46 +223,55 @@ class CloudXSetup:
             except ValueError:
                 self.print_status("Invalid input", False, 2)
                 return False
-                
-            # Read private key
-            private_key = self.ssh_key_file.read_text()
             
             # Create a title for the 1Password item
             ssh_key_title = f"cloudX SSH Key - {self.ssh_key}"
             
-            # Create item in 1Password
-            # Format: op item create --category=sshkey --title="..." --vault="..." "privateKey=<private key>"
-            result = subprocess.run(
-                [
-                    'op', 'item', 'create',
-                    '--category=sshkey',
-                    f'--title={ssh_key_title}',
-                    f'--vault={selected_vault}',
-                    f'privateKey={private_key}'
-                ],
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            # Check if a key with this title already exists in 1Password
+            ssh_keys = list_ssh_keys()
+            existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title), None)
             
-            if result.returncode != 0:
-                self.print_status(f"Error storing SSH key in 1Password: {result.stderr}", False, 2)
-                return False
+            if existing_key:
+                self.print_status(f"SSH key '{ssh_key_title}' already exists in 1Password", True, 2)
+                # Get the public key
+                result = subprocess.run(
+                    ['op', 'item', 'get', existing_key['id'], '--fields', 'public key'],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
                 
-            self.print_status("SSH key stored in 1Password successfully", True, 2)
+                if result.returncode == 0:
+                    public_key = result.stdout.strip()
+                    # Save it to the expected location
+                    if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
+                        self.print_status(f"Saved existing public key to {self.ssh_key_file}.pub", True, 2)
+                        return True
+            else:
+                # Create a new SSH key in 1Password
+                self.print_status(f"Creating new SSH key '{ssh_key_title}' in 1Password...", None, 2)
+                success, public_key, item_id = create_ssh_key(ssh_key_title, selected_vault)
+                
+                if not success:
+                    self.print_status("Failed to create SSH key in 1Password", False, 2)
+                    return False
+                
+                self.print_status("SSH key created successfully in 1Password", True, 2)
+                
+                # Save the public key to the expected location
+                if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
+                    self.print_status(f"Saved public key to {self.ssh_key_file}.pub", True, 2)
+                    return True
+                else:
+                    self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
+                    return False
             
-            # Ask if user wants to remove private key from filesystem
-            remove_private_key = self.prompt("Would you like to remove the private key from the filesystem? (for security)", "Y").lower() == "y"
-            if remove_private_key:
-                # We should only remove the private key, keep the public key
-                self.ssh_key_file.unlink()
-                self.print_status("Private key removed from filesystem", True, 2)
-                self.print_status("\033[93mImportant: If you need to recover this key, it's now only available in 1Password\033[0m", None, 2)
-                
+            # Remind user to enable the key in 1Password SSH agent
+            self.print_status("\033[93mImportant: Make sure the key is enabled in 1Password's SSH agent settings\033[0m", None, 2)
             return True
             
         except Exception as e:
-            self.print_status(f"Error storing key in 1Password: {str(e)}", False, 2)
+            self.print_status(f"Error creating key in 1Password: {str(e)}", False, 2)
             return False
 
     def setup_ssh_key(self) -> bool:
@@ -334,21 +288,8 @@ class CloudXSetup:
             if op_available:
                 self.print_status("Using 1Password SSH agent for authentication", True, 2)
                 
-                # Generate a key if it doesn't exist
-                key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
-                if not key_exists:
-                    self.print_status(f"No SSH key found for '{self.ssh_key}'", None, 2)
-                    create_key = self.prompt("Would you like to create a new SSH key?", "Y").lower() == "y"
-                    if create_key:
-                        # We'll continue to the standard key creation flow
-                        pass
-                    else:
-                        # User doesn't want a key, so we'll skip and just rely on 1Password
-                        return True
-                else:
-                    # Key exists, offer to store it in 1Password
-                    self._store_key_in_1password()
-                    return True
+                # Always prefer to create keys in 1Password
+                return self._create_1password_key()
             else:
                 proceed = self.prompt("1Password integration not available. Continue with standard SSH key setup?", "Y").lower() != "n"
                 if not proceed:
@@ -393,14 +334,8 @@ class CloudXSetup:
                     self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
                     self.print_status("Set key file permissions", True, 2)
             
-            # For both standard setup and 1Password when a key needs to be created,
-            # we'll use the same code to generate the key
+            # Standard key generation successful
             self.print_status("Key generated successfully", True, 2)
-            
-            # If using 1Password, offer to store the key there
-            if self.use_1password:
-                self._store_key_in_1password()
-                
             return True
 
         except Exception as e:
