@@ -1,3 +1,11 @@
+## [0.3.15](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.14...v0.3.15) (2025-03-06)
+
+
+### Bug Fixes
+
+* added --ssh-config ([893d919](https://github.com/easytocloud/cloudX-proxy/commit/893d919f7ef30dc5fd41a06b2c032d0035180e80))
+* added --ssh-config also in connect ([75b7b3b](https://github.com/easytocloud/cloudX-proxy/commit/75b7b3b5ecac5f1a1012ce9d4905bc5aed444915))
+
 ## [0.3.14](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.13...v0.3.14) (2025-03-06)
 
 
