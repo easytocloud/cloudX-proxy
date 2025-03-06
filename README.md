@@ -62,6 +62,15 @@ uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
 
 # Setup with AWS environment
 uvx cloudx-proxy setup --aws-env prod
+
+# Setup with custom SSH config location
+uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
+
+# Setup with 1Password integration
+uvx cloudx-proxy setup --1password
+
+# Combine options
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
 ```
 
 The setup command will:
@@ -73,13 +82,16 @@ The setup command will:
 
 2. Manage SSH Keys:
    - Creates new SSH key pair if needed
-   - Offers 1Password integration options:
-     * Using 1Password SSH agent
-     * Storing private key as 1Password document
+   - Fully supports 1Password integration:
+     * Using 1Password SSH agent via `--1password` flag
+     * Creates keys directly in 1Password's secure vault
+     * Only public keys are exported to the filesystem
+     * Follows SSH best practices using public keys to limit authentication attempts
 
 3. Configure SSH:
-   - Creates ~/.ssh/vscode/config with proper settings
-   - Sets up environment-specific configurations
+   - Creates SSH configs with proper settings (default: ~/.ssh/vscode/config)
+   - Custom config location can be specified with `--ssh-config`
+   - Sets up optimized environment-specific configurations
    - Configures ProxyCommand with all necessary parameters
    - Ensures main ~/.ssh/config includes the configuration
 
@@ -100,12 +112,18 @@ Will create a configuration like this:
 
 ```
 # Base environment config (created once per environment)
+# Environment-wide configuration
 Host cloudx-dev-*
     User ec2-user
     IdentityFile ~/.ssh/vscode/mykey
+    IdentitiesOnly yes
     ProxyCommand uvx cloudx-proxy connect %h %p --profile myprofile --ssh-key mykey
+    TCPKeepAlive yes
+    ControlMaster auto
+    ControlPath ~/.ssh/control/%r@%h:%p
+    ControlPersist 4h
 
-# Host entry (added for specific instance)
+# Minimal host entry (inherits all settings from environment config)
 Host cloudx-dev-myserver
     HostName i-0123456789abcdef0
 ```
@@ -123,17 +141,19 @@ In these examples, ssh will use cloudx-proxy to connect to AWS with the `myprofi
 VSCode will be able to connect to the instance using the same SSH configuration.
 
 ### SSH Configuration Details
-The setup command creates:
+The setup command creates an optimized SSH configuration structure:
 
 1. A base configuration for each environment (cloudx-{env}-*) with:
    - User and key settings
-   - 1Password integration if selected
+   - 1Password SSH agent integration if selected
    - ProxyCommand with appropriate parameters
+   - SSH multiplexing for better performance
+   - TCP keepalive for connection stability
 
-2. Individual host entries for each instance:
+2. Minimal host entries for each instance:
    - Uses consistent naming (cloudx-{env}-hostname)
-   - Maps to instance IDs automatically
-   - Inherits environment-level settings
+   - Only contains the HostName directive for the instance ID
+   - Inherits all environment-level settings automatically
 
 When adding new instances to an existing environment, you can choose to:
 - Override the environment configuration with new settings
@@ -161,7 +181,9 @@ uvx cloudx-proxy setup [OPTIONS]
 
 Options:
 - `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.
-- `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in ~/.ssh/vscode/{name}. This same name can be used in the connect command.
+- `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in the SSH config directory. This same name can be used in the connect command.
+- `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/vscode/config.
+- `--1password` (flag): Enable 1Password SSH agent integration. Creates keys directly in 1Password and configures SSH to use the 1Password SSH agent.
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 
 Example usage:
@@ -172,8 +194,11 @@ uvx cloudx-proxy setup
 # Setup with custom profile and key
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
 
-# Setup with AWS environment
-uvx cloudx-proxy setup --profile myprofile --aws-env prod
+# Setup with custom SSH config and 1Password integration
+uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config --1password
+
+# Complete setup with all options
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
 ```
 
 #### Connect Command
@@ -188,6 +213,7 @@ Arguments:
 Options:
 - `--profile` (default: vscode): AWS profile to use. Should match the profile used in setup.
 - `--ssh-key` (default: vscode): Name of the SSH key to use. Should match the key name used in setup.
+- `--ssh-config` (optional): Path to the SSH config file to use. If provided during setup, should match here.
 - `--region` (optional): AWS region to use. If not specified, uses the region from the AWS profile.
 - `--aws-env` (optional): AWS environment directory to use. Should match the environment used in setup.
 
@@ -253,12 +279,17 @@ These permissions are required to bootstrap the instance, so that after creation
    - Check that your AWS credentials have the required permissions
    - Verify the instance ID is correct
    - Increase the VSCode SSH timeout if needed
+   - Check if the instance is starting up (can take several minutes)
 
 3. **SSH Key Issues**
    - If using 1Password SSH agent, verify agent is running (~/.1password/agent.sock exists)
    - Check file permissions (600 for private key, 644 for public key)
    - Verify the public key is being successfully pushed to the instance
-   - For stored keys in 1Password, ensure you can access them via the CLI
+   - For 1Password-managed keys, make sure:
+     * 1Password CLI is installed and authenticated (`op account list` works)
+     * SSH agent is enabled in 1Password settings
+     * Keys are added to the SSH agent in 1Password
+     * The key is visible with `op item list --categories "SSH Key"`
 
 4. **AWS Configuration**
    - Confirm AWS CLI is configured with valid credentials

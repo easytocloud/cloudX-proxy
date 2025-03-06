@@ -383,37 +383,55 @@ class CloudXSetup:
     IdentitiesOnly yes
 """
 
-    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str, include_proxy: bool = True) -> str:
-        """Build a host configuration block.
+    def _build_environment_config(self, cloudx_env: str) -> str:
+        """Build an environment-wide configuration block with all common settings.
         
         Args:
             cloudx_env: CloudX environment
-            hostname: Hostname for the instance
-            instance_id: EC2 instance ID (None for wildcard entries)
-            include_proxy: Whether to include the ProxyCommand (default: True)
             
         Returns:
-            str: Complete host configuration block
+            str: Complete environment configuration block
         """
-        host_pattern = hostname if hostname else "*"
         host_entry = f"""
-Host cloudx-{cloudx_env}-{host_pattern}
-"""
-        # Add HostName only for specific hosts, not for wildcard entries
-        if instance_id:
-            host_entry += f"""    HostName {instance_id}
-"""
-        host_entry += """    User ec2-user
+Host cloudx-{cloudx_env}-*
+    User ec2-user
 """
         # Add authentication configuration
         host_entry += self._build_auth_config()
         
-        # Add proxy command if requested
-        if include_proxy:
-            host_entry += f"""    ProxyCommand {self._build_proxy_command()}
+        # Add ProxyCommand
+        host_entry += f"""    ProxyCommand {self._build_proxy_command()}
+"""
+        
+        # Add SSH multiplexing configuration
+        control_path = "~/.ssh/control/%r@%h:%p"
+        if platform.system() == 'Windows':
+            # Use forward slashes for Windows as well, SSH client will handle conversion
+            control_path = "~/.ssh/control/%r@%h:%p"
+            
+        host_entry += f"""    TCPKeepAlive yes
+    ControlMaster auto
+    ControlPath {control_path}
+    ControlPersist 4h
 """
         
         return host_entry
+        
+    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str) -> str:
+        """Build a minimal host configuration block that inherits from the environment.
+        
+        Args:
+            cloudx_env: CloudX environment
+            hostname: Hostname for the instance
+            instance_id: EC2 instance ID
+            
+        Returns:
+            str: Minimal host configuration block with only hostname
+        """
+        return f"""
+Host cloudx-{cloudx_env}-{hostname}
+    HostName {instance_id}
+"""
         
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
         """Add settings to a specific host entry.
@@ -566,23 +584,12 @@ Host cloudx-{cloudx_env}-{host_pattern}
             
             # Build base configuration with wildcard hostname pattern
             # Start with a header comment
-            base_config = "# cloudx-proxy SSH Configuration\n"
-            
-            # Add base host pattern with wildcard
-            base_config += self._build_host_config(cloudx_env, None, None, include_proxy=True)
-            
-            # Add SSH multiplexing configuration
-            control_path = "~/.ssh/control/%r@%h:%p"
-            if platform.system() == 'Windows':
-                # Use forward slashes for Windows as well, SSH client will handle conversion
-                control_path = "~/.ssh/control/%r@%h:%p"
-                
-            base_config += f"""    TCPKeepAlive yes
-    ControlMaster auto
-    ControlPath {control_path}
-    ControlPersist 4h
-
+            base_config = """# cloudx-proxy SSH Configuration
+# Environment configuration with settings applied to all hosts in this environment
 """
+            
+            # Add environment-wide configuration with all common settings
+            base_config += self._build_environment_config(cloudx_env)
             
             # If file exists, append the new config, otherwise create it
             if self.ssh_config_file.exists():
@@ -598,9 +605,9 @@ Host cloudx-{cloudx_env}-{host_pattern}
                 self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
                 self.print_status("Set config file permissions to 600", True, 2)
 
-            # Add specific host entry using the consolidated helper method
+            # Add specific host entry - only specifying the hostname
             self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
-            host_entry = self._build_host_config(cloudx_env, hostname, instance_id, include_proxy=False)
+            host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
             with open(self.ssh_config_file, 'a') as f:
                 f.write(host_entry)
             self.print_status("Host entry added", True, 2)
