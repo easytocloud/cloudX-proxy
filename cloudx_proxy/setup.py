@@ -210,6 +210,39 @@ Host cloudx-{cloudx_env}-{hostname}
                 return True
             return False
 
+    def _ensure_control_dir(self) -> bool:
+        """Create SSH control directory with proper permissions.
+        
+        Creates ~/.ssh/control directory with 700 permissions on Unix-like systems,
+        or appropriate permissions on Windows.
+        
+        Returns:
+            bool: True if directory was created or exists with proper permissions
+        """
+        try:
+            # Create path based on platform
+            if platform.system() == 'Windows':
+                control_dir = Path(self.home_dir) / ".ssh" / "control"
+            else:
+                control_dir = Path(self.home_dir) / ".ssh" / "control"
+            
+            # Create directory if it doesn't exist
+            if not control_dir.exists():
+                control_dir.mkdir(parents=True, exist_ok=True)
+                self.print_status(f"Created control directory: {control_dir}", True, 2)
+            
+            # Set proper permissions on Unix-like systems
+            if platform.system() != 'Windows':
+                import stat
+                control_dir.chmod(stat.S_IRWXU)  # 700 permissions (owner read/write/execute)
+                self.print_status("Set directory permissions to 700", True, 2)
+                
+            return True
+            
+        except Exception as e:
+            self.print_status(f"Error creating control directory: {str(e)}", False, 2)
+            return False
+    
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
         """Set up SSH config for the instance.
         
@@ -219,6 +252,7 @@ Host cloudx-{cloudx_env}-{hostname}
            - User and key configuration
            - 1Password SSH agent integration if selected
            - ProxyCommand using uvx cloudx-proxy with proper parameters
+           - SSH multiplexing configuration (ControlMaster, ControlPath, ControlPersist)
         
         2. For an existing environment:
            - Skips creating duplicate environment config
@@ -232,6 +266,10 @@ Host cloudx-{cloudx_env}-{hostname}
             IdentityAgent ~/.1password/agent.sock  # If using 1Password
             IdentityFile ~/.ssh/vscode/key.pub    # .pub for 1Password, no .pub otherwise
             IdentitiesOnly yes                    # If using 1Password
+            TCPKeepAlive yes
+            ControlMaster auto
+            ControlPath ~/.ssh/control/%r@%h:%p
+            ControlPersist 4h
             ProxyCommand uvx cloudx-proxy connect %h %p --profile profile --aws-env env
         
         # Host entries (added for each instance)
@@ -258,7 +296,7 @@ Host cloudx-{cloudx_env}-{hostname}
                 if f"Host cloudx-{cloudx_env}-*" in current_config:
                     self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
                     choice = self.prompt(
-                        "Would you like to (1) override the existing config or "
+                        "Would you like to \n(1) override the existing config\n "
                         "(2) add settings to the specific host entry?",
                         "1"
                     )
@@ -294,6 +332,10 @@ Host cloudx-{cloudx_env}-{hostname}
             if self.ssh_key != "vscode":
                 proxy_command += f" --ssh-key {self.ssh_key}"
 
+            # Ensure control directory exists with proper permissions
+            if not self._ensure_control_dir():
+                return False
+            
             # Build base configuration
             base_config = f"""# cloudx-proxy SSH Configuration
 Host cloudx-{cloudx_env}-*
@@ -302,6 +344,18 @@ Host cloudx-{cloudx_env}-*
             # Add key configuration
             base_config += f"""    IdentityFile {self.ssh_key_file}
     IdentitiesOnly yes
+
+"""
+            # Add SSH multiplexing configuration
+            control_path = "~/.ssh/control/%r@%h:%p"
+            if platform.system() == 'Windows':
+                # Use forward slashes for Windows as well, SSH client will handle conversion
+                control_path = "~/.ssh/control/%r@%h:%p"
+                
+            base_config += f"""    TCPKeepAlive yes
+    ControlMaster auto
+    ControlPath {control_path}
+    ControlPersist 4h
 
 """
             # Add ProxyCommand
