@@ -9,7 +9,8 @@ import boto3
 from botocore.exceptions import ClientError
 
 class CloudXSetup:
-    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None):
+    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
+                 aws_env: str = None, use_1password: bool = False):
         """Initialize cloudx-proxy setup.
         
         Args:
@@ -17,11 +18,14 @@ class CloudXSetup:
             ssh_key: SSH key name (default: "vscode")
             ssh_config: SSH config file path (default: None, uses ~/.ssh/vscode/config)
             aws_env: AWS environment directory (default: None)
+            use_1password: Use 1Password SSH agent for authentication (default: False)
         """
         self.profile = profile
         self.ssh_key = ssh_key
         self.aws_env = aws_env
+        self.use_1password = use_1password
         self.home_dir = str(Path.home())
+        self.onepassword_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         
         # Set up ssh config paths based on provided config or default
         if ssh_config:
@@ -151,6 +155,171 @@ class CloudXSetup:
             self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
             return False
 
+    def _check_1password_availability(self) -> bool:
+        """Check if 1Password CLI and SSH agent are available.
+        
+        Returns:
+            bool: True if 1Password is available and configured
+        """
+        if not self.use_1password:
+            return False
+            
+        self.print_status("Checking 1Password availability...")
+        
+        # Check if 1Password CLI is installed
+        try:
+            result = subprocess.run(
+                ['op', '--version'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.returncode != 0:
+                self.print_status("1Password CLI not found. Please install it from https://1password.com/downloads/command-line/", False, 2)
+                return False
+            
+            self.print_status(f"1Password CLI {result.stdout.strip()} installed", True, 2)
+            
+            # Check if 1Password SSH agent is running
+            agent_sock_exists = self.onepassword_agent_sock.exists()
+            if not agent_sock_exists:
+                self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
+                self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
+                return False
+                
+            self.print_status("1Password SSH agent socket found", True, 2)
+            
+            # Check if agent is active by trying to list identities
+            result = subprocess.run(
+                ['ssh-add', '-l'],
+                env={**os.environ, 'SSH_AUTH_SOCK': str(self.onepassword_agent_sock)},
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if "Could not open a connection to your authentication agent" in result.stderr:
+                self.print_status("1Password SSH agent is not running", False, 2)
+                return False
+                
+            self.print_status("1Password SSH agent is running", True, 2)
+            
+            # Check if 1Password CLI is authenticated
+            result = subprocess.run(
+                ['op', 'account', 'list'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                self.print_status("1Password CLI is not authenticated. Run 'op signin' first.", False, 2)
+                return False
+                
+            self.print_status("1Password CLI is authenticated", True, 2)
+            return True
+            
+        except FileNotFoundError:
+            self.print_status("1Password CLI not found. Please install it from https://1password.com/downloads/command-line/", False, 2)
+            return False
+        except Exception as e:
+            self.print_status(f"Error checking 1Password: {str(e)}", False, 2)
+            return False
+
+    def _store_key_in_1password(self) -> bool:
+        """Store the SSH key in 1Password and offer to remove it from the filesystem.
+        
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # If key exists on filesystem, offer to store it in 1Password
+            key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
+            
+            if not key_exists:
+                self.print_status("No SSH key found to store in 1Password", False, 2)
+                return False
+                
+            # Ask if user wants to store the key in 1Password
+            store_in_1password = self.prompt("Would you like to store this SSH key in 1Password?", "Y").lower() == "y"
+            if not store_in_1password:
+                return True
+                
+            # Get vault to store the key in
+            result = subprocess.run(
+                ['op', 'vault', 'list', '--format=json'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            if result.returncode != 0:
+                self.print_status("Error listing 1Password vaults", False, 2)
+                return False
+                
+            vaults = json.loads(result.stdout)
+            if not vaults:
+                self.print_status("No 1Password vaults found", False, 2)
+                return False
+                
+            # Display available vaults
+            print("\n\033[96mAvailable 1Password vaults:\033[0m")
+            for i, vault in enumerate(vaults):
+                print(f"  {i+1}. {vault['name']}")
+                
+            # Let user select vault
+            vault_num = self.prompt("Select vault number to store SSH key", "1")
+            try:
+                vault_idx = int(vault_num) - 1
+                if vault_idx < 0 or vault_idx >= len(vaults):
+                    self.print_status("Invalid vault number", False, 2)
+                    return False
+                selected_vault = vaults[vault_idx]['id']
+            except ValueError:
+                self.print_status("Invalid input", False, 2)
+                return False
+                
+            # Read private key
+            private_key = self.ssh_key_file.read_text()
+            
+            # Create a title for the 1Password item
+            ssh_key_title = f"cloudX SSH Key - {self.ssh_key}"
+            
+            # Create item in 1Password
+            # Format: op item create --category=sshkey --title="..." --vault="..." "privateKey=<private key>"
+            result = subprocess.run(
+                [
+                    'op', 'item', 'create',
+                    '--category=sshkey',
+                    f'--title={ssh_key_title}',
+                    f'--vault={selected_vault}',
+                    f'privateKey={private_key}'
+                ],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                self.print_status(f"Error storing SSH key in 1Password: {result.stderr}", False, 2)
+                return False
+                
+            self.print_status("SSH key stored in 1Password successfully", True, 2)
+            
+            # Ask if user wants to remove private key from filesystem
+            remove_private_key = self.prompt("Would you like to remove the private key from the filesystem? (for security)", "Y").lower() == "y"
+            if remove_private_key:
+                # We should only remove the private key, keep the public key
+                self.ssh_key_file.unlink()
+                self.print_status("Private key removed from filesystem", True, 2)
+                self.print_status("\033[93mImportant: If you need to recover this key, it's now only available in 1Password\033[0m", None, 2)
+                
+            return True
+            
+        except Exception as e:
+            self.print_status(f"Error storing key in 1Password: {str(e)}", False, 2)
+            return False
+
     def setup_ssh_key(self) -> bool:
         """Set up SSH key pair.
         
@@ -158,6 +327,34 @@ class CloudXSetup:
             bool: True if key was set up successfully
         """
         self.print_header("SSH Key Configuration")
+        
+        # Check 1Password integration if requested
+        if self.use_1password:
+            op_available = self._check_1password_availability()
+            if op_available:
+                self.print_status("Using 1Password SSH agent for authentication", True, 2)
+                
+                # Generate a key if it doesn't exist
+                key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
+                if not key_exists:
+                    self.print_status(f"No SSH key found for '{self.ssh_key}'", None, 2)
+                    create_key = self.prompt("Would you like to create a new SSH key?", "Y").lower() == "y"
+                    if create_key:
+                        # We'll continue to the standard key creation flow
+                        pass
+                    else:
+                        # User doesn't want a key, so we'll skip and just rely on 1Password
+                        return True
+                else:
+                    # Key exists, offer to store it in 1Password
+                    self._store_key_in_1password()
+                    return True
+            else:
+                proceed = self.prompt("1Password integration not available. Continue with standard SSH key setup?", "Y").lower() != "n"
+                if not proceed:
+                    return False
+                self.use_1password = False  # Fallback to standard setup
+        
         self.print_status(f"Checking SSH key '{self.ssh_key}' configuration...")
         
         try:
@@ -196,6 +393,14 @@ class CloudXSetup:
                     self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
                     self.print_status("Set key file permissions", True, 2)
             
+            # For both standard setup and 1Password when a key needs to be created,
+            # we'll use the same code to generate the key
+            self.print_status("Key generated successfully", True, 2)
+            
+            # If using 1Password, offer to store the key there
+            if self.use_1password:
+                self._store_key_in_1password()
+                
             return True
 
         except Exception as e:
@@ -206,6 +411,75 @@ class CloudXSetup:
                 return True
             return False
 
+    def _build_proxy_command(self) -> str:
+        """Build the ProxyCommand with appropriate parameters.
+        
+        Returns:
+            str: The complete ProxyCommand string
+        """
+        proxy_command = "uvx cloudx-proxy connect %h %p"
+        if self.profile != "vscode":
+            proxy_command += f" --profile {self.profile}"
+        if self.aws_env:
+            proxy_command += f" --aws-env {self.aws_env}"
+        if self.ssh_key != "vscode":
+            proxy_command += f" --ssh-key {self.ssh_key}"
+            
+        return proxy_command
+        
+    def _build_auth_config(self) -> str:
+        """Build the authentication configuration block.
+        
+        Returns:
+            str: SSH config authentication section
+        """
+        if self.use_1password:
+            # When using 1Password:
+            # 1. Set IdentityAgent to the 1Password socket 
+            # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search
+            # 3. Set IdentitiesOnly to yes to avoid using ssh-agent keys
+            return f"""    IdentityAgent {self.onepassword_agent_sock}
+    IdentityFile {self.ssh_key_file}.pub
+    IdentitiesOnly yes
+"""
+        else:
+            # Standard SSH key configuration
+            return f"""    IdentityFile {self.ssh_key_file}
+    IdentitiesOnly yes
+"""
+
+    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str, include_proxy: bool = True) -> str:
+        """Build a host configuration block.
+        
+        Args:
+            cloudx_env: CloudX environment
+            hostname: Hostname for the instance
+            instance_id: EC2 instance ID (None for wildcard entries)
+            include_proxy: Whether to include the ProxyCommand (default: True)
+            
+        Returns:
+            str: Complete host configuration block
+        """
+        host_pattern = hostname if hostname else "*"
+        host_entry = f"""
+Host cloudx-{cloudx_env}-{host_pattern}
+"""
+        # Add HostName only for specific hosts, not for wildcard entries
+        if instance_id:
+            host_entry += f"""    HostName {instance_id}
+"""
+        host_entry += """    User ec2-user
+"""
+        # Add authentication configuration
+        host_entry += self._build_auth_config()
+        
+        # Add proxy command if requested
+        if include_proxy:
+            host_entry += f"""    ProxyCommand {self._build_proxy_command()}
+"""
+        
+        return host_entry
+        
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
         """Add settings to a specific host entry.
         
@@ -219,25 +493,8 @@ class CloudXSetup:
             bool: True if settings were added successfully
         """
         try:
-            # Build host entry with all settings
-            proxy_command = "uvx cloudx-proxy connect %h %p"
-            if self.profile != "vscode":
-                proxy_command += f" --profile {self.profile}"
-            if self.aws_env:
-                proxy_command += f" --aws-env {self.aws_env}"
-            if self.ssh_key != "vscode":
-                proxy_command += f" --ssh-key {self.ssh_key}"
-
-            host_entry = f"""
-Host cloudx-{cloudx_env}-{hostname}
-    HostName {instance_id}
-    User ec2-user
-"""
-            host_entry += f"""    IdentityFile {self.ssh_key_file}
-    IdentitiesOnly yes
-"""
-            host_entry += f"""    ProxyCommand {proxy_command}
-"""
+            # Generate the host entry using the consolidated helper method
+            host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
             
             # Append host entry
             with open(self.ssh_config_file, 'a') as f:
@@ -367,30 +624,18 @@ Host cloudx-{cloudx_env}-{hostname}
 
             # Create base config
             self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
-            # Build ProxyCommand with only non-default parameters
-            # We don't need to include ssh_config here as SSH will handle that through the config
-            proxy_command = "uvx cloudx-proxy connect %h %p"
-            if self.profile != "vscode":
-                proxy_command += f" --profile {self.profile}"
-            if self.aws_env:
-                proxy_command += f" --aws-env {self.aws_env}"
-            if self.ssh_key != "vscode":
-                proxy_command += f" --ssh-key {self.ssh_key}"
-
+            
             # Ensure control directory exists with proper permissions
             if not self._ensure_control_dir():
                 return False
             
-            # Build base configuration
-            base_config = f"""# cloudx-proxy SSH Configuration
-Host cloudx-{cloudx_env}-*
-    User ec2-user
-"""
-            # Add key configuration
-            base_config += f"""    IdentityFile {self.ssh_key_file}
-    IdentitiesOnly yes
-
-"""
+            # Build base configuration with wildcard hostname pattern
+            # Start with a header comment
+            base_config = "# cloudx-proxy SSH Configuration\n"
+            
+            # Add base host pattern with wildcard
+            base_config += self._build_host_config(cloudx_env, None, None, include_proxy=True)
+            
             # Add SSH multiplexing configuration
             control_path = "~/.ssh/control/%r@%h:%p"
             if platform.system() == 'Windows':
@@ -402,9 +647,6 @@ Host cloudx-{cloudx_env}-*
     ControlPath {control_path}
     ControlPersist 4h
 
-"""
-            # Add ProxyCommand
-            base_config += f"""    ProxyCommand {proxy_command}
 """
             
             # If file exists, append the new config, otherwise create it
@@ -421,12 +663,9 @@ Host cloudx-{cloudx_env}-*
                 self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
                 self.print_status("Set config file permissions to 600", True, 2)
 
-            # Add specific host entry
+            # Add specific host entry using the consolidated helper method
             self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
-            host_entry = f"""
-Host cloudx-{cloudx_env}-{hostname}
-    HostName {instance_id}
-"""
+            host_entry = self._build_host_config(cloudx_env, hostname, instance_id, include_proxy=False)
             with open(self.ssh_config_file, 'a') as f:
                 f.write(host_entry)
             self.print_status("Host entry added", True, 2)

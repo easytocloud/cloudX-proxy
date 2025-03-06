@@ -52,7 +52,8 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str):
+@click.option('--1password', 'use_1password', is_flag=True, help='Use 1Password SSH agent for SSH authentication')
+def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     This command will:
@@ -65,9 +66,16 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str):
         cloudx-proxy setup
         cloudx-proxy setup --profile myprofile --ssh-key mykey
         cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
+        cloudx-proxy setup --1password
     """
     try:
-        setup = CloudXSetup(profile=profile, ssh_key=ssh_key, ssh_config=ssh_config, aws_env=aws_env)
+        setup = CloudXSetup(
+            profile=profile, 
+            ssh_key=ssh_key, 
+            ssh_config=ssh_config, 
+            aws_env=aws_env,
+            use_1password=use_1password
+        )
         
         print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
         

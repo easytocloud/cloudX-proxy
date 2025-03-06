@@ -91,9 +91,21 @@ class CloudXProxy:
         return False
 
     def push_ssh_key(self) -> bool:
-        """Push SSH public key to instance via EC2 Instance Connect."""
+        """Push SSH public key to instance via EC2 Instance Connect.
+        
+        Determines which SSH key to use (regular key or 1Password-managed key),
+        then pushes the correct public key to the instance.
+        """
         try:
-            with open(self.ssh_key) as f:
+            # Check if file exists with .pub extension (could be a non-1Password key)
+            # or if the .pub extension is already part of self.ssh_key (because of 1Password integration)
+            key_path = self.ssh_key
+            if not key_path.endswith('.pub'):
+                key_path += '.pub'
+                
+            self.log(f"Using public key: {key_path}")
+            
+            with open(key_path) as f:
                 public_key = f.read()
             
             self.ec2_connect.send_ssh_public_key(
