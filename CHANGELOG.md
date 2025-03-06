@@ -1,3 +1,10 @@
+## [0.3.13](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.12...v0.3.13) (2025-03-06)
+
+
+### Bug Fixes
+
+* create more stable ssh connection ([606f196](https://github.com/easytocloud/cloudX-proxy/commit/606f196e10b5c3237ea07e45ef80cacdd36af12b))
+
 ## [0.3.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.11...v0.3.12) (2025-02-14)
 
 
