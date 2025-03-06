@@ -1,3 +1,10 @@
+## [0.4.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.2...v0.4.3) (2025-03-06)
+
+
+### Bug Fixes
+
+* improved documentation and simplified ssh config output ([5b5d9a4](https://github.com/easytocloud/cloudX-proxy/commit/5b5d9a496bcba440e4863e8285673e8f97d3c684))
+
 ## [0.4.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.1...v0.4.2) (2025-03-06)
 
 
