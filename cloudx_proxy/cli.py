@@ -17,8 +17,9 @@ def cli():
 @click.option('--profile', default='vscode', help='AWS profile to use (default: vscode)')
 @click.option('--region', help='AWS region (default: from profile, or eu-west-1 if not set)')
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, aws_env: str):
+def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, aws_env: str):
     """Connect to an EC2 instance via SSM.
     
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
@@ -26,6 +27,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     Example usage:
         cloudx-proxy i-0123456789abcdef0 22
         cloudx-proxy i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
+        cloudx-proxy i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
         cloudx-proxy i-0123456789abcdef0 22 --aws-env prod
     """
     try:
@@ -35,6 +37,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             profile=profile,
             region=region,
             ssh_key=ssh_key,
+            ssh_config=ssh_config,
             aws_env=aws_env
         )
         
@@ -48,8 +51,9 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @cli.command()
 @click.option('--profile', default='vscode', help='AWS profile to use (default: vscode)')
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-def setup(profile: str, ssh_key: str, aws_env: str):
+def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     This command will:
@@ -61,9 +65,10 @@ def setup(profile: str, ssh_key: str, aws_env: str):
     Example usage:
         cloudx-proxy setup
         cloudx-proxy setup --profile myprofile --ssh-key mykey
+        cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
     """
     try:
-        setup = CloudXSetup(profile=profile, ssh_key=ssh_key, aws_env=aws_env)
+        setup = CloudXSetup(profile=profile, ssh_key=ssh_key, ssh_config=ssh_config, aws_env=aws_env)
         
         print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
         

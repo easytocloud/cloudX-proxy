@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode", 
-                 region: str = None, ssh_key: str = "vscode", aws_env: str = None):
+                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -39,8 +39,14 @@ class CloudXProxy:
         self.ec2 = self.session.client('ec2')
         self.ec2_connect = self.session.client('ec2-instance-connect')
         
-        # Set up SSH key path
-        self.ssh_dir = os.path.expanduser("~/.ssh/vscode")
+        # Set up SSH config and key paths
+        if ssh_config:
+            self.ssh_config_file = os.path.expanduser(ssh_config)
+            self.ssh_dir = os.path.dirname(self.ssh_config_file)
+        else:
+            self.ssh_dir = os.path.expanduser("~/.ssh/vscode")
+            self.ssh_config_file = os.path.join(self.ssh_dir, "config")
+            
         self.ssh_key = os.path.join(self.ssh_dir, f"{ssh_key}.pub")
 
     def log(self, message: str) -> None:

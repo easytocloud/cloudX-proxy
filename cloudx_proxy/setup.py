@@ -9,20 +9,28 @@ import boto3
 from botocore.exceptions import ClientError
 
 class CloudXSetup:
-    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", aws_env: str = None):
+    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None):
         """Initialize cloudx-proxy setup.
         
         Args:
             profile: AWS profile name (default: "vscode")
             ssh_key: SSH key name (default: "vscode")
+            ssh_config: SSH config file path (default: None, uses ~/.ssh/vscode/config)
             aws_env: AWS environment directory (default: None)
         """
         self.profile = profile
         self.ssh_key = ssh_key
         self.aws_env = aws_env
         self.home_dir = str(Path.home())
-        self.ssh_dir = Path(self.home_dir) / ".ssh" / "vscode"
-        self.ssh_config_file = self.ssh_dir / "config"
+        
+        # Set up ssh config paths based on provided config or default
+        if ssh_config:
+            self.ssh_config_file = Path(os.path.expanduser(ssh_config))
+            self.ssh_dir = self.ssh_config_file.parent
+        else:
+            self.ssh_dir = Path(self.home_dir) / ".ssh" / "vscode"
+            self.ssh_config_file = self.ssh_dir / "config"
+        
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.default_env = None
 
@@ -330,8 +338,10 @@ Host cloudx-{cloudx_env}-{hostname}
                 if f"Host cloudx-{cloudx_env}-*" in current_config:
                     self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
                     choice = self.prompt(
-                        "Would you like to \n  1: override the existing config\n "
-                        "  2: add settings to the specific host entry?\nSelect an option ",
+                        "Would you like to \n"
+                        "  1: override the existing config\n"
+                        "  2: add settings to the specific host entry?\n"
+                        "Select an option",
                         "1"
                     )
                     if choice == "2":
@@ -420,7 +430,9 @@ Host cloudx-{cloudx_env}-{hostname}
                 f.write(host_entry)
             self.print_status("Host entry added", True, 2)
 
-            # Ensure main SSH config includes our config
+            # Handle system SSH config integration
+            system_config_path = Path(self.home_dir) / ".ssh" / "config"
+            
             # Ensure ~/.ssh directory has proper permissions
             ssh_parent_dir = Path(self.home_dir) / ".ssh"
             if not ssh_parent_dir.exists():
@@ -428,36 +440,41 @@ Host cloudx-{cloudx_env}-{hostname}
                 self.print_status(f"Created SSH directory: {ssh_parent_dir}", True, 2)
             self._set_directory_permissions(ssh_parent_dir)
             
-            main_config = Path(self.home_dir) / ".ssh" / "config"
-            include_line = f"Include {self.ssh_config_file}\n"
-            
-            if main_config.exists():
-                content = main_config.read_text()
-                if include_line not in content:
-                    with open(main_config, 'a') as f:
-                        f.write(f"\n{include_line}")
-                    self.print_status("Added include line to main SSH config", True, 2)
-                else:
-                    self.print_status("Main SSH config already includes our config", True, 2)
-                
-                # Set correct permissions on main config file
-                if platform.system() != 'Windows':
-                    import stat
-                    main_config.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
-                    self.print_status("Set main config file permissions to 600", True, 2)
+            # If our config file is the system config, we're done
+            if self.ssh_config_file.samefile(system_config_path) if self.ssh_config_file.exists() and system_config_path.exists() else str(self.ssh_config_file) == str(system_config_path):
+                self.print_status("Using system SSH config directly, no Include needed", True, 2)
             else:
-                main_config.write_text(include_line)
-                self.print_status("Created main SSH config with include line", True, 2)
+                # Otherwise, make sure the system config includes our config file
+                include_line = f"Include {self.ssh_config_file}\n"
                 
-                # Set correct permissions on newly created main config file
-                if platform.system() != 'Windows':
-                    import stat
-                    main_config.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
-                    self.print_status("Set main config file permissions to 600", True, 2)
+                if system_config_path.exists():
+                    content = system_config_path.read_text()
+                    if include_line not in content:
+                        with open(system_config_path, 'a') as f:
+                            f.write(f"\n{include_line}")
+                        self.print_status("Added include line to system SSH config", True, 2)
+                    else:
+                        self.print_status("System SSH config already includes our config", True, 2)
+                    
+                    # Set correct permissions on system config file
+                    if platform.system() != 'Windows':
+                        import stat
+                        system_config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+                        self.print_status("Set system config file permissions to 600", True, 2)
+                else:
+                    system_config_path.write_text(include_line)
+                    self.print_status("Created system SSH config with include line", True, 2)
+                    
+                    # Set correct permissions on newly created system config file
+                    if platform.system() != 'Windows':
+                        import stat
+                        system_config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+                        self.print_status("Set system config file permissions to 600", True, 2)
 
             self.print_status("SSH configuration summary:", None)
-            self.print_status(f"Main config: {main_config}", None, 2)
+            self.print_status(f"System config: {system_config_path}", None, 2)
             self.print_status(f"cloudx-proxy config: {self.ssh_config_file}", None, 2)
+            self.print_status(f"SSH key directory: {self.ssh_dir}", None, 2)
             self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
             
             return True
