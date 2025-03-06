@@ -68,6 +68,25 @@ class CloudXSetup:
         response = input(prompt_text)
         return response if response else default
 
+    def _set_directory_permissions(self, directory: Path) -> bool:
+        """Set proper permissions (700) on a directory for Unix-like systems.
+        
+        Args:
+            directory: Path to the directory
+            
+        Returns:
+            bool: True if permissions were set successfully
+        """
+        try:
+            if platform.system() != 'Windows':
+                import stat
+                directory.chmod(stat.S_IRWXU)  # 700 permissions (owner read/write/execute)
+                self.print_status(f"Set {directory} permissions to 700", True, 2)
+            return True
+        except Exception as e:
+            self.print_status(f"Error setting permissions: {str(e)}", False, 2)
+            return False
+
     def setup_aws_profile(self) -> bool:
         """Set up AWS profile using aws configure command.
         
@@ -138,10 +157,20 @@ class CloudXSetup:
             self.ssh_dir.mkdir(parents=True, exist_ok=True)
             self.print_status("SSH directory exists", True, 2)
             
+            # Set proper permissions on the vscode directory
+            if not self._set_directory_permissions(self.ssh_dir):
+                return False
+            
             key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
             
             if key_exists:
                 self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
+                # Set proper permissions on existing key files
+                if platform.system() != 'Windows':
+                    import stat
+                    self.ssh_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
+                    self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
+                    self.print_status("Set key file permissions", True, 2)
             else:
                 self.print_status(f"Generating new SSH key '{self.ssh_key}'...", None, 2)
                 subprocess.run([
@@ -152,6 +181,12 @@ class CloudXSetup:
                 ], check=True)
                 self.print_status("SSH key generated", True, 2)
                 
+                # Set proper permissions on newly generated key files
+                if platform.system() != 'Windows':
+                    import stat
+                    self.ssh_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
+                    self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
+                    self.print_status("Set key file permissions", True, 2)
             
             return True
 
@@ -200,6 +235,13 @@ Host cloudx-{cloudx_env}-{hostname}
             with open(self.ssh_config_file, 'a') as f:
                 f.write(host_entry)
             self.print_status("Host entry added with settings", True, 2)
+            
+            # Set proper permissions on the config file
+            if platform.system() != 'Windows':
+                import stat
+                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
+                self.print_status("Set config file permissions to 600", True, 2)
+                
             return True
 
         except Exception as e:
@@ -220,24 +262,16 @@ Host cloudx-{cloudx_env}-{hostname}
             bool: True if directory was created or exists with proper permissions
         """
         try:
-            # Create path based on platform
-            if platform.system() == 'Windows':
-                control_dir = Path(self.home_dir) / ".ssh" / "control"
-            else:
-                control_dir = Path(self.home_dir) / ".ssh" / "control"
+            # Create control directory path
+            control_dir = Path(self.home_dir) / ".ssh" / "control"
             
             # Create directory if it doesn't exist
             if not control_dir.exists():
                 control_dir.mkdir(parents=True, exist_ok=True)
                 self.print_status(f"Created control directory: {control_dir}", True, 2)
             
-            # Set proper permissions on Unix-like systems
-            if platform.system() != 'Windows':
-                import stat
-                control_dir.chmod(stat.S_IRWXU)  # 700 permissions (owner read/write/execute)
-                self.print_status("Set directory permissions to 700", True, 2)
-                
-            return True
+            # Set proper permissions
+            return self._set_directory_permissions(control_dir)
             
         except Exception as e:
             self.print_status(f"Error creating control directory: {str(e)}", False, 2)
@@ -296,8 +330,8 @@ Host cloudx-{cloudx_env}-{hostname}
                 if f"Host cloudx-{cloudx_env}-*" in current_config:
                     self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
                     choice = self.prompt(
-                        "Would you like to \n(1) override the existing config\n "
-                        "(2) add settings to the specific host entry?",
+                        "Would you like to \n  1: override the existing config\n "
+                        "  2: add settings to the specific host entry?\nSelect an option ",
                         "1"
                     )
                     if choice == "2":
@@ -369,6 +403,12 @@ Host cloudx-{cloudx_env}-*
             else:
                 self.ssh_config_file.write_text(base_config)
             self.print_status("Base configuration created", True, 2)
+            
+            # Set proper permissions on the config file
+            if platform.system() != 'Windows':
+                import stat
+                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
+                self.print_status("Set config file permissions to 600", True, 2)
 
             # Add specific host entry
             self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
@@ -381,6 +421,13 @@ Host cloudx-{cloudx_env}-{hostname}
             self.print_status("Host entry added", True, 2)
 
             # Ensure main SSH config includes our config
+            # Ensure ~/.ssh directory has proper permissions
+            ssh_parent_dir = Path(self.home_dir) / ".ssh"
+            if not ssh_parent_dir.exists():
+                ssh_parent_dir.mkdir(parents=True, exist_ok=True)
+                self.print_status(f"Created SSH directory: {ssh_parent_dir}", True, 2)
+            self._set_directory_permissions(ssh_parent_dir)
+            
             main_config = Path(self.home_dir) / ".ssh" / "config"
             include_line = f"Include {self.ssh_config_file}\n"
             
@@ -392,11 +439,23 @@ Host cloudx-{cloudx_env}-{hostname}
                     self.print_status("Added include line to main SSH config", True, 2)
                 else:
                     self.print_status("Main SSH config already includes our config", True, 2)
+                
+                # Set correct permissions on main config file
+                if platform.system() != 'Windows':
+                    import stat
+                    main_config.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+                    self.print_status("Set main config file permissions to 600", True, 2)
             else:
                 main_config.write_text(include_line)
                 self.print_status("Created main SSH config with include line", True, 2)
+                
+                # Set correct permissions on newly created main config file
+                if platform.system() != 'Windows':
+                    import stat
+                    main_config.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+                    self.print_status("Set main config file permissions to 600", True, 2)
 
-            self.print_status("\nSSH configuration summary:", None)
+            self.print_status("SSH configuration summary:", None)
             self.print_status(f"Main config: {main_config}", None, 2)
             self.print_status(f"cloudx-proxy config: {self.ssh_config_file}", None, 2)
             self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
