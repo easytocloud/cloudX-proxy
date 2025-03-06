@@ -1,3 +1,10 @@
+## [0.3.14](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.13...v0.3.14) (2025-03-06)
+
+
+### Bug Fixes
+
+* restricted permissions on generated files and directories ([6b7b057](https://github.com/easytocloud/cloudX-proxy/commit/6b7b057832ab95fc6cb00c759380663eec2960a5))
+
 ## [0.3.13](https://github.com/easytocloud/cloudX-proxy/compare/v0.3.12...v0.3.13) (2025-03-06)
 
 
