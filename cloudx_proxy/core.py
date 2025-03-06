@@ -39,7 +39,7 @@ class CloudXProxy:
         self.ec2 = self.session.client('ec2')
         self.ec2_connect = self.session.client('ec2-instance-connect')
         
-        # Set up SSH config and key paths
+        # Set up SSH configuration and key paths
         if ssh_config:
             self.ssh_config_file = os.path.expanduser(ssh_config)
             self.ssh_dir = os.path.dirname(self.ssh_config_file)

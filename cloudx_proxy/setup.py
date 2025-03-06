@@ -368,6 +368,7 @@ Host cloudx-{cloudx_env}-{hostname}
             # Create base config
             self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
             # Build ProxyCommand with only non-default parameters
+            # We don't need to include ssh_config here as SSH will handle that through the config
             proxy_command = "uvx cloudx-proxy connect %h %p"
             if self.profile != "vscode":
                 proxy_command += f" --profile {self.profile}"

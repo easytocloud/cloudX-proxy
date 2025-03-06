@@ -27,7 +27,6 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     Example usage:
         cloudx-proxy i-0123456789abcdef0 22
         cloudx-proxy i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
-        cloudx-proxy i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
         cloudx-proxy i-0123456789abcdef0 22 --aws-env prod
     """
     try:
