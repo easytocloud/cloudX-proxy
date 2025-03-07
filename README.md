@@ -108,22 +108,30 @@ The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
 ```
 
-Will create a configuration like this:
+Will create a three-tier configuration structure like this:
 
 ```
-# Base environment config (created once per environment)
-# Environment-wide configuration
-Host cloudx-dev-*
+# Generic configuration (shared by all environments)
+# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Configuration type: generic
+Host cloudx-*
     User ec2-user
-    IdentityFile ~/.ssh/vscode/mykey
-    IdentitiesOnly yes
-    ProxyCommand uvx cloudx-proxy connect %h %p --profile myprofile --ssh-key mykey
     TCPKeepAlive yes
     ControlMaster auto
     ControlPath ~/.ssh/control/%r@%h:%p
     ControlPersist 4h
 
-# Minimal host entry (inherits all settings from environment config)
+# Environment configuration (specific to a single environment)
+# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Configuration type: environment
+Host cloudx-dev-*
+    IdentityFile ~/.ssh/vscode/mykey
+    IdentitiesOnly yes
+    ProxyCommand uvx cloudx-proxy connect %h %p --profile myprofile --ssh-key mykey
+
+# Host configuration (specific to a single instance)
+# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Configuration type: host
 Host cloudx-dev-myserver
     HostName i-0123456789abcdef0
 ```
@@ -141,23 +149,30 @@ In these examples, ssh will use cloudx-proxy to connect to AWS with the `myprofi
 VSCode will be able to connect to the instance using the same SSH configuration.
 
 ### SSH Configuration Details
-The setup command creates an optimized SSH configuration structure:
+The setup command creates a hierarchical three-tier SSH configuration structure:
 
-1. A base configuration for each environment (cloudx-{env}-*) with:
-   - User and key settings
-   - 1Password SSH agent integration if selected
-   - ProxyCommand with appropriate parameters
-   - SSH multiplexing for better performance
+1. Generic configuration (cloudx-*) containing common settings shared across all environments:
+   - User settings (ec2-user)
    - TCP keepalive for connection stability
+   - SSH multiplexing for better performance (ControlMaster, ControlPath, ControlPersist)
 
-2. Minimal host entries for each instance:
-   - Uses consistent naming (cloudx-{env}-hostname)
-   - Only contains the HostName directive for the instance ID
-   - Inherits all environment-level settings automatically
+2. Environment-specific configuration (cloudx-{env}-*) with:
+   - Authentication settings (IdentityFile, IdentityAgent for 1Password)
+   - ProxyCommand with environment-specific parameters
+   - Inherits all settings from the generic configuration
+
+3. Host-specific entries (cloudx-{env}-hostname) with:
+   - Instance ID (HostName directive)
+   - Inherits all settings from both generic and environment configurations
+
+Each configuration tier is clearly marked with a timestamp and version information comment, making it easy to track when and how configurations were created.
 
 When adding new instances to an existing environment, you can choose to:
+- Keep the existing environment configuration if it's compatible
 - Override the environment configuration with new settings
-- Add instance-specific settings while preserving the environment config
+- Add host-specific settings only
+
+This three-tier structure offers better maintainability by reducing duplication and making it clear which settings apply broadly and which are specific to an environment or host.
 
 ### VSCode Configuration
 

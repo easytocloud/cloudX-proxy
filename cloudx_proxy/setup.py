@@ -346,6 +346,18 @@ class CloudXSetup:
                 return True
             return False
 
+    def _get_version(self) -> str:
+        """Get the current version of the cloudx-proxy package.
+        
+        Returns:
+            str: Version string
+        """
+        try:
+            from . import __version__
+            return __version__
+        except (ImportError, AttributeError):
+            return "unknown"
+    
     def _build_proxy_command(self) -> str:
         """Build the ProxyCommand with appropriate parameters.
         
@@ -383,24 +395,31 @@ class CloudXSetup:
     IdentitiesOnly yes
 """
 
-    def _build_environment_config(self, cloudx_env: str) -> str:
-        """Build an environment-wide configuration block with all common settings.
+    def _get_timestamp(self) -> str:
+        """Get a formatted timestamp for configuration comments.
         
-        Args:
-            cloudx_env: CloudX environment
-            
         Returns:
-            str: Complete environment configuration block
+            str: Formatted timestamp
         """
-        host_entry = f"""
-Host cloudx-{cloudx_env}-*
-    User ec2-user
-"""
-        # Add authentication configuration
-        host_entry += self._build_auth_config()
+        from datetime import datetime
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _build_generic_config(self) -> str:
+        """Build a generic configuration block with common settings for all environments.
         
-        # Add ProxyCommand
-        host_entry += f"""    ProxyCommand {self._build_proxy_command()}
+        Returns:
+            str: Generic configuration block
+        """
+        version = self._get_version()
+        timestamp = self._get_timestamp()
+        
+        # Start with metadata comment
+        config = f"""
+# Created by cloudx-proxy v{version} on {timestamp}
+# Configuration type: generic
+Host cloudx-*
+    User ec2-user
+    TCPKeepAlive yes
 """
         
         # Add SSH multiplexing configuration
@@ -409,16 +428,42 @@ Host cloudx-{cloudx_env}-*
             # Use forward slashes for Windows as well, SSH client will handle conversion
             control_path = "~/.ssh/control/%r@%h:%p"
             
-        host_entry += f"""    TCPKeepAlive yes
-    ControlMaster auto
+        config += f"""    ControlMaster auto
     ControlPath {control_path}
     ControlPersist 4h
 """
         
-        return host_entry
+        return config
+        
+    def _build_environment_config(self, cloudx_env: str) -> str:
+        """Build an environment-specific configuration block.
+        
+        Args:
+            cloudx_env: CloudX environment
+            
+        Returns:
+            str: Environment configuration block
+        """
+        version = self._get_version()
+        timestamp = self._get_timestamp()
+        
+        # Start with metadata comment
+        config = f"""
+# Created by cloudx-proxy v{version} on {timestamp}
+# Configuration type: environment
+Host cloudx-{cloudx_env}-*
+"""
+        # Add authentication configuration
+        config += self._build_auth_config()
+        
+        # Add ProxyCommand
+        config += f"""    ProxyCommand {self._build_proxy_command()}
+"""
+        
+        return config
         
     def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str) -> str:
-        """Build a minimal host configuration block that inherits from the environment.
+        """Build a host-specific configuration block.
         
         Args:
             cloudx_env: CloudX environment
@@ -426,13 +471,62 @@ Host cloudx-{cloudx_env}-*
             instance_id: EC2 instance ID
             
         Returns:
-            str: Minimal host configuration block with only hostname
+            str: Host configuration block
         """
-        return f"""
+        version = self._get_version()
+        timestamp = self._get_timestamp()
+        
+        # Start with metadata comment
+        config = f"""
+# Created by cloudx-proxy v{version} on {timestamp}
+# Configuration type: host
 Host cloudx-{cloudx_env}-{hostname}
     HostName {instance_id}
 """
         
+        return config
+    
+    def _check_config_exists(self, pattern: str, current_config: str) -> bool:
+        """Check if a configuration pattern exists in the current config.
+        
+        Args:
+            pattern: Host pattern to look for (e.g., 'cloudx-*', 'cloudx-dev-*')
+            current_config: Current SSH config content
+            
+        Returns:
+            bool: True if pattern exists in configuration
+        """
+        return f"Host {pattern}" in current_config
+    
+    def _extract_host_config(self, pattern: str, current_config: str) -> Tuple[str, str]:
+        """Extract a host configuration block from the current config.
+        
+        Args:
+            pattern: Host pattern to extract (e.g., 'cloudx-*', 'cloudx-dev-*')
+            current_config: Current SSH config content
+            
+        Returns:
+            Tuple[str, str]: Extracted host configuration, remaining configuration
+        """
+        lines = current_config.splitlines()
+        host_config_lines = []
+        remaining_lines = []
+        in_host_block = False
+        
+        for line in lines:
+            if line.strip() == f"Host {pattern}":
+                in_host_block = True
+                host_config_lines.append(line)
+            elif in_host_block and line.strip().startswith("Host "):
+                in_host_block = False
+                remaining_lines.append(line)
+            elif in_host_block:
+                host_config_lines.append(line)
+            else:
+                remaining_lines.append(line)
+                
+        return "\n".join(host_config_lines), "\n".join(remaining_lines)
+    
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
         """Add settings to a specific host entry.
         
@@ -446,13 +540,29 @@ Host cloudx-{cloudx_env}-{hostname}
             bool: True if settings were added successfully
         """
         try:
-            # Generate the host entry using the consolidated helper method
-            host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
-            
-            # Append host entry
-            with open(self.ssh_config_file, 'a') as f:
-                f.write(host_entry)
-            self.print_status("Host entry added with settings", True, 2)
+            # Check if host entry already exists
+            host_pattern = f"cloudx-{cloudx_env}-{hostname}"
+            if self._check_config_exists(host_pattern, current_config):
+                # Extract existing host configuration
+                host_config, remaining_config = self._extract_host_config(host_pattern, current_config)
+                
+                # Update host configuration
+                host_config = self._build_host_config(cloudx_env, hostname, instance_id)
+                
+                # Write updated config
+                with open(self.ssh_config_file, 'w') as f:
+                    f.write(remaining_config)
+                    f.write(host_config)
+                
+                self.print_status(f"Updated existing host entry for {host_pattern}", True, 2)
+            else:
+                # Generate new host entry
+                host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
+                
+                # Append host entry
+                with open(self.ssh_config_file, 'a') as f:
+                    f.write(host_entry)
+                self.print_status(f"Added new host entry for {host_pattern}", True, 2)
             
             # Set proper permissions on the config file
             if platform.system() != 'Windows':
@@ -469,6 +579,81 @@ Host cloudx-{cloudx_env}-{hostname}
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
                 return True
             return False
+    
+    def _check_and_create_generic_config(self, current_config: str) -> Tuple[bool, str]:
+        """Check if generic configuration exists and create it if needed.
+        
+        Args:
+            current_config: Current SSH config content
+            
+        Returns:
+            Tuple[bool, str]: Success flag, Updated configuration
+        """
+        if self._check_config_exists("cloudx-*", current_config):
+            self.print_status("Found existing generic config for cloudx-*", True, 2)
+            return True, current_config
+        
+        self.print_status("Creating generic config for cloudx-*", None, 2)
+        generic_config = self._build_generic_config()
+        
+        # Append generic config to current config
+        updated_config = current_config
+        if updated_config and not updated_config.endswith('\n'):
+            updated_config += '\n'
+        updated_config += generic_config
+        
+        return True, updated_config
+        
+    def _check_and_create_environment_config(self, cloudx_env: str, current_config: str) -> Tuple[bool, str]:
+        """Check if environment configuration exists and create it if needed.
+        
+        Args:
+            cloudx_env: CloudX environment
+            current_config: Current SSH config content
+            
+        Returns:
+            Tuple[bool, str]: Success flag, Updated configuration
+        """
+        if self._check_config_exists(f"cloudx-{cloudx_env}-*", current_config):
+            self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
+            
+            # Option to override if needed
+            choice = self.prompt(
+                "Would you like to \n"
+                "  1: override the existing environment config\n"
+                "  2: keep existing environment config?\n"
+                "Select an option",
+                "2"
+            )
+            
+            if choice == "1":
+                # Remove existing config for this environment
+                self.print_status("Removing existing environment configuration", None, 2)
+                env_config, remaining_config = self._extract_host_config(f"cloudx-{cloudx_env}-*", current_config)
+                
+                # Create new environment config
+                env_config = self._build_environment_config(cloudx_env)
+                
+                # Append new environment config to remaining config
+                updated_config = remaining_config
+                if updated_config and not updated_config.endswith('\n'):
+                    updated_config += '\n'
+                updated_config += env_config
+                
+                return True, updated_config
+            
+            return True, current_config
+        
+        self.print_status(f"Creating environment config for cloudx-{cloudx_env}-*", None, 2)
+        env_config = self._build_environment_config(cloudx_env)
+        
+        # Append environment config to current config
+        updated_config = current_config
+        if updated_config and not updated_config.endswith('\n'):
+            updated_config += '\n'
+        updated_config += env_config
+        
+        return True, updated_config
 
     def _ensure_control_dir(self) -> bool:
         """Create SSH control directory with proper permissions.
@@ -496,38 +681,21 @@ Host cloudx-{cloudx_env}-{hostname}
             return False
     
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
-        """Set up SSH config for the instance.
+        """Set up SSH config for the instance using a three-tier configuration approach.
         
-        This method manages the SSH configuration in ~/.ssh/vscode/config, with the following behavior:
-        1. For a new environment (if cloudx-{env}-* doesn't exist):
-           Creates a base config with:
-           - User and key configuration
-           - 1Password SSH agent integration if selected
-           - ProxyCommand using uvx cloudx-proxy with proper parameters
-           - SSH multiplexing configuration (ControlMaster, ControlPath, ControlPersist)
+        This method implements a hierarchical SSH configuration with three levels:
+        1. Generic (cloudx-*): Common settings for all environments
+           - User settings
+           - TCP keepalive
+           - SSH multiplexing configuration
         
-        2. For an existing environment:
-           - Skips creating duplicate environment config
-           - Only adds the new host entry
+        2. Environment (cloudx-{env}-*): Environment-specific settings
+           - Authentication configuration (identity settings)
+           - ProxyCommand with environment-specific parameters
         
-        Example config structure:
-        ```
-        # Base environment config (created only once per environment)
-        Host cloudx-{env}-*
-            User ec2-user
-            IdentityAgent ~/.1password/agent.sock  # If using 1Password
-            IdentityFile ~/.ssh/vscode/key.pub    # .pub for 1Password, no .pub otherwise
-            IdentitiesOnly yes                    # If using 1Password
-            TCPKeepAlive yes
-            ControlMaster auto
-            ControlPath ~/.ssh/control/%r@%h:%p
-            ControlPersist 4h
-            ProxyCommand uvx cloudx-proxy connect %h %p --profile profile --aws-env env
-        
-        # Host entries (added for each instance)
-        Host cloudx-{env}-hostname
-            HostName i-1234567890
-        ```
+        3. Host (cloudx-{env}-hostname): Instance-specific settings
+           - HostName (instance ID)
+           - Optional overrides for incompatible settings
         
         Args:
             cloudx_env: CloudX environment (e.g., dev, prod)
@@ -538,80 +706,46 @@ Host cloudx-{cloudx_env}-{hostname}
             bool: True if config was set up successfully
         """
         self.print_header("SSH Configuration")
-        self.print_status("Setting up SSH configuration...")
+        self.print_status("Setting up SSH configuration with three-tier approach...")
         
         try:
-            # Check existing configuration
-            if self.ssh_config_file.exists():
-                current_config = self.ssh_config_file.read_text()
-                # Check if configuration for this environment already exists
-                if f"Host cloudx-{cloudx_env}-*" in current_config:
-                    self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
-                    choice = self.prompt(
-                        "Would you like to \n"
-                        "  1: override the existing config\n"
-                        "  2: add settings to the specific host entry?\n"
-                        "Select an option",
-                        "1"
-                    )
-                    if choice == "2":
-                        # Add settings to specific host entry
-                        self.print_status("Adding settings to specific host entry", None, 2)
-                        return self._add_host_entry(cloudx_env, instance_id, hostname, current_config)
-                    else:
-                        # Remove existing config for this environment
-                        self.print_status("Removing existing configuration", None, 2)
-                        lines = current_config.splitlines()
-                        new_lines = []
-                        skip = False
-                        for line in lines:
-                            if line.strip() == f"Host cloudx-{cloudx_env}-*":
-                                skip = True
-                            elif skip and line.startswith("Host "):
-                                skip = False
-                            if not skip:
-                                new_lines.append(line)
-                        current_config = "\n".join(new_lines)
-                        with open(self.ssh_config_file, 'w') as f:
-                            f.write(current_config)
-
-            # Create base config
-            self.print_status(f"Creating new config for cloudx-{cloudx_env}-*", None, 2)
-            
             # Ensure control directory exists with proper permissions
             if not self._ensure_control_dir():
                 return False
             
-            # Build base configuration with wildcard hostname pattern
-            # Start with a header comment
-            base_config = """# cloudx-proxy SSH Configuration
-# Environment configuration with settings applied to all hosts in this environment
-"""
-            
-            # Add environment-wide configuration with all common settings
-            base_config += self._build_environment_config(cloudx_env)
-            
-            # If file exists, append the new config, otherwise create it
+            # Initialize or read current configuration
+            current_config = ""
             if self.ssh_config_file.exists():
-                with open(self.ssh_config_file, 'a') as f:
-                    f.write("\n" + base_config)
-            else:
-                self.ssh_config_file.write_text(base_config)
-            self.print_status("Base configuration created", True, 2)
+                current_config = self.ssh_config_file.read_text()
+            
+            # 1. Check and create generic config (highest level)
+            self.print_status("Checking generic configuration...", None, 2)
+            success, current_config = self._check_and_create_generic_config(current_config)
+            if not success:
+                return False
+            
+            # 2. Check and create environment config
+            self.print_status("Checking environment configuration...", None, 2)
+            success, current_config = self._check_and_create_environment_config(cloudx_env, current_config)
+            if not success:
+                return False
+                
+            # Write the updated config with generic and environment tiers
+            self.ssh_config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.ssh_config_file.write_text(current_config)
+            self.print_status("Generic and environment configurations created", True, 2)
             
             # Set proper permissions on the config file
             if platform.system() != 'Windows':
                 import stat
-                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
+                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
                 self.print_status("Set config file permissions to 600", True, 2)
-
-            # Add specific host entry - only specifying the hostname
-            self.print_status(f"Adding host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
-            host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
-            with open(self.ssh_config_file, 'a') as f:
-                f.write(host_entry)
-            self.print_status("Host entry added", True, 2)
-
+            
+            # 3. Add or update host entry (lowest level)
+            self.print_status(f"Adding/updating host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
+            if not self._add_host_entry(cloudx_env, instance_id, hostname, current_config):
+                return False
+            
             # Handle system SSH config integration
             system_config_path = Path(self.home_dir) / ".ssh" / "config"
             
@@ -622,8 +756,17 @@ Host cloudx-{cloudx_env}-{hostname}
                 self.print_status(f"Created SSH directory: {ssh_parent_dir}", True, 2)
             self._set_directory_permissions(ssh_parent_dir)
             
-            # If our config file is the system config, we're done
-            if self.ssh_config_file.samefile(system_config_path) if self.ssh_config_file.exists() and system_config_path.exists() else str(self.ssh_config_file) == str(system_config_path):
+            # Handle system config integration
+            same_file = False
+            if self.ssh_config_file.exists() and system_config_path.exists():
+                try:
+                    same_file = self.ssh_config_file.samefile(system_config_path)
+                except:
+                    same_file = str(self.ssh_config_file) == str(system_config_path)
+            else:
+                same_file = str(self.ssh_config_file) == str(system_config_path)
+                
+            if same_file:
                 self.print_status("Using system SSH config directly, no Include needed", True, 2)
             else:
                 # Otherwise, make sure the system config includes our config file

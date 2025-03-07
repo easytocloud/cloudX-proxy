@@ -40,6 +40,8 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             aws_env=aws_env
         )
         
+        client.log(f"cloudx-proxy@{__version__} Connecting to instance {instance_id} on port {port}...")
+        
         if not client.connect():
             sys.exit(1)
             
