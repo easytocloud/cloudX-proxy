@@ -69,6 +69,9 @@ uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
 # Setup with 1Password integration
 uvx cloudx-proxy setup --1password
 
+# Setup with non-interactive automation
+uvx cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+
 # Combine options
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
 ```
@@ -224,6 +227,9 @@ Options:
 - `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/vscode/config.
 - `--1password` (flag): Enable 1Password SSH agent integration. Creates keys directly in 1Password and configures SSH to use the 1Password SSH agent.
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
+- `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
+- `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
+- `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values.
 
 Example usage:
 ```bash

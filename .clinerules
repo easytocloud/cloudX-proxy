@@ -1,0 +1,103 @@
+# cloudX-proxy
+
+CloudX is a development environment consisting of 
+
+- a local VSCode installation
+- a remote development server (EC2 instance) running with auto-shutdown
+
+The AWS side consists of the following components:
+
+- an CloudX-environment
+- a CloudX-user
+- a CloudX-instance
+
+The CloudX-environment is a set of resources that are used to run the CloudX-instance. 
+Most importantly, it defines the VPC subnet where the instances are launched.
+
+A CloudX-user is an IAM user with the necessary permissions to manage their CloudX-instance(s) based on a ABAC tag defined in the cloudX-environment.
+
+A CloudX-instance is an EC2 instance that is launched in the CloudX-environment.
+It's most important feature is that it is automatically stopped after a certain period of inactivity.
+
+The AWS components are deployed from AWS Service Catalog.
+
+The cloudX-proxy is a tool that allows you to access the remote development server from your local VSCode installation over an ssh connection established by the cloudX-proxy. The cloudX-proxy takes care of starting the instance should it be stopped. Also, it pushes an ssh key to the instance to allow you to connect to it. Given that the proxy uses AWS Systems Manager to initiate the connection, you don't need to open any inbound ports in the security group of the instance.
+
+## Architecture
+
+### SSH Configuration Structure
+
+CloudX-proxy uses a hierarchical three-tier SSH configuration approach:
+
+1. **Generic Configuration (cloudx-*)**: Common settings for all environments
+   - User settings (ec2-user)
+   - TCP keepalive
+   - SSH multiplexing configuration
+
+2. **Environment Configuration (cloudx-{env}-*)**: Environment-specific settings
+   - Authentication configuration (identity settings)
+   - ProxyCommand with environment-specific parameters
+
+3. **Host Configuration (cloudx-{env}-hostname)**: Instance-specific settings
+   - HostName (instance ID)
+   - Optional overrides for incompatible settings
+
+This tiered approach minimizes configuration duplication and makes it clear which settings apply broadly and which are specific to an environment or host.
+
+### Security Model
+
+The primary security boundary is enforced through AWS IAM via Systems Manager (SSM) and EC2 Instance Connect:
+- Only authenticated AWS users with appropriate IAM permissions can establish SSM sessions
+- EC2 Instance Connect allows temporary injection of SSH public keys
+- No inbound SSH ports need to be exposed, as all connections are through AWS SSM's secure tunneling
+- All connection attempts and key pushes are logged in AWS CloudTrail
+
+## Operating Modes
+
+CloudX-proxy runs in either of two modes:
+
+- setup
+- connect
+
+### Setup Mode
+
+With setup mode, the config files and directories for the connect mode are established. The setup mode is typically only run once per CloudX-instance. When running setup, the user is asked for their AWS AK/SK of the IAM user created as CloudX-user. This will be stored in ~/.aws/credentials. Alternatively the user can store this data themselves in ~/.aws/credentials. The profile name is 'vscode' by default, but can be overruled with the --profile option. When multiple instances are used, it is recommended to use a profile cloudx-env-user where env is the environment and user the username.
+
+By default an ssh key named vscode will be used - and created if not available in the configuration directory (~/.ssh/vscode). The user can specify a different key with the --ssh-key option.
+
+A 'Host cloudx-{env}-*' entry will be created in the ~/.ssh/vscode/config file for each environment. A user can potentially have multiple instances in a single environment as well as multiple environments.
+
+#### Setup Options
+
+- **--profile**: AWS profile to use (default: 'vscode')
+- **--ssh-key**: SSH key name to use (default: 'vscode')
+- **--ssh-config**: SSH config file to use (default: ~/.ssh/vscode/config)
+- **--aws-env**: AWS environment directory (default: ~/.aws)
+- **--1password**: Use 1Password SSH agent for SSH authentication
+- **--instance**: EC2 instance ID to set up connection for
+- **--hostname**: Hostname to use for SSH configuration (without this, hostname will be generated from instance ID or prompted)
+- **--yes**: Non-interactive mode, use default values for all prompts
+
+### Connect Mode
+
+In connect mode, the actual connection is established. This is not used by the user directly, but in the ssh configuration as a proxy command. The command is run using uvx.
+
+### 1Password Integration
+
+When the --1password option is used:
+1. CloudX-proxy first checks if any SSH key with the specified name exists in any 1Password vault
+2. If the key exists, it's reused (the public key is exported to the filesystem)
+3. If the key doesn't exist, the user selects which vault to store the newly created key in
+4. The SSH configuration uses the 1Password SSH agent socket and the public key
+
+### Automation Support
+
+The --yes option enables non-interactive mode for use in scripts and automated processes:
+- All prompts use default values
+- Hostname is automatically generated based on instance ID
+- AWS profile must already be configured
+- EC2 instance ID must be provided with the --instance option
+
+## Future Considerations
+
+[Potential Breaking Change] Replacing all default values from 'vscode' to 'cloudx' would align the naming but would be a breaking change. This would affect default profile names, SSH key names, and configuration directories.
