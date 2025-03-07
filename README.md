@@ -174,6 +174,30 @@ When adding new instances to an existing environment, you can choose to:
 
 This three-tier structure offers better maintainability by reducing duplication and making it clear which settings apply broadly and which are specific to an environment or host.
 
+### Security Model: AWS and SSH Integration
+
+cloudX-proxy implements a unique dual-layer security approach that combines AWS's robust authentication mechanisms with SSH's connection handling capabilities:
+
+#### AWS Security Layer (Primary)
+The primary security boundary is enforced through AWS Systems Manager (SSM) and EC2 Instance Connect. This layer provides:
+- **Access Control**: Only authenticated AWS users with appropriate IAM permissions can establish SSM sessions
+- **Dynamic Key Authorization**: EC2 Instance Connect allows temporary injection of SSH public keys, valid only for a single session
+- **Network Security**: No inbound SSH ports need to be exposed, as all connections are established through AWS SSM's secure tunneling
+- **Audit Trail**: All connection attempts and key pushes are logged in AWS CloudTrail
+
+#### SSH Layer (Secondary)
+SSH serves primarily as a connection handler rather than the main security mechanism:
+- **Ephemeral Authentication**: The SSH key pair is used only to establish the connection through the SSM tunnel
+- **Session Management**: SSH handles the actual terminal session, file transfers, and multiplexing
+- **Key Flexibility**: Since keys are pushed dynamically for each session, the same key can safely be used across multiple instances
+- **Zero Trust Model**: Even if a key is compromised, access still requires valid AWS credentials and permissions
+
+This architecture means that:
+1. The security of the connection relies primarily on AWS IAM permissions and SSM session management
+2. SSH keys can be reused across instances without security implications
+3. Each connection gets a fresh key authorization through EC2 Instance Connect
+4. Instances remain completely closed to direct SSH access from the internet
+
 ### VSCode Configuration
 
 1. Install the "Remote - SSH" extension in VSCode
