@@ -224,15 +224,21 @@ class CloudXSetup:
                 self.print_status("Invalid input", False, 2)
                 return False
             
-            # Create a title for the 1Password item
-            ssh_key_title = f"cloudX SSH Key - {self.ssh_key}"
+            # Create possible title variations for the 1Password item
+            ssh_key_title_with_prefix = f"cloudX SSH Key - {self.ssh_key}"
+            ssh_key_title_without_prefix = self.ssh_key
             
-            # Check if a key with this title already exists in 1Password
+            # Check if a key with either title exists in 1Password
             ssh_keys = list_ssh_keys()
-            existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title), None)
+            
+            # First check for our prefixed format, then for a plain key with the same name
+            existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_with_prefix), None)
+            if not existing_key:
+                existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_without_prefix), None)
             
             if existing_key:
-                self.print_status(f"SSH key '{ssh_key_title}' already exists in 1Password", True, 2)
+                key_title = existing_key['title']
+                self.print_status(f"SSH key '{key_title}' already exists in 1Password", True, 2)
                 # Get the public key
                 result = subprocess.run(
                     ['op', 'item', 'get', existing_key['id'], '--fields', 'public key'],
@@ -249,8 +255,8 @@ class CloudXSetup:
                         return True
             else:
                 # Create a new SSH key in 1Password
-                self.print_status(f"Creating new SSH key '{ssh_key_title}' in 1Password...", None, 2)
-                success, public_key, item_id = create_ssh_key(ssh_key_title, selected_vault)
+                self.print_status(f"Creating new SSH key '{ssh_key_title_with_prefix}' in 1Password...", None, 2)
+                success, public_key, item_id = create_ssh_key(ssh_key_title_with_prefix, selected_vault)
                 
                 if not success:
                     self.print_status("Failed to create SSH key in 1Password", False, 2)
