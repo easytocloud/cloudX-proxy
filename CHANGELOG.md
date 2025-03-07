@@ -1,3 +1,10 @@
+## [0.4.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.5...v0.4.6) (2025-03-07)
+
+
+### Bug Fixes
+
+* added --yes for non-interactive setup ([7e6007f](https://github.com/easytocloud/cloudX-proxy/commit/7e6007f68db3a958d1987a308f20fa85b5f7289f))
+
 ## [0.4.5](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.4...v0.4.5) (2025-03-07)
 
 
