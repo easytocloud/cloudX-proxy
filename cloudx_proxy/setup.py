@@ -10,8 +10,12 @@ from botocore.exceptions import ClientError
 from ._1password import check_1password_cli, check_ssh_agent, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
 
 class CloudXSetup:
+    # Define SSH key prefix as a constant
+    SSH_KEY_PREFIX = "cloudX SSH Key - "
+    
     def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
-                 aws_env: str = None, use_1password: bool = False):
+                 aws_env: str = None, use_1password: bool = False, instance_id: str = None, 
+                 non_interactive: bool = False):
         """Initialize cloudx-proxy setup.
         
         Args:
@@ -20,11 +24,15 @@ class CloudXSetup:
             ssh_config: SSH config file path (default: None, uses ~/.ssh/vscode/config)
             aws_env: AWS environment directory (default: None)
             use_1password: Use 1Password SSH agent for authentication (default: False)
+            instance_id: EC2 instance ID to set up connection for (optional)
+            non_interactive: Non-interactive mode, use defaults for all prompts (default: False)
         """
         self.profile = profile
         self.ssh_key = ssh_key
         self.aws_env = aws_env
         self.use_1password = use_1password
+        self.instance_id = instance_id
+        self.non_interactive = non_interactive
         self.home_dir = str(Path.home())
         self.onepassword_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         
@@ -74,6 +82,16 @@ class CloudXSetup:
         Returns:
             str: User's input or default value
         """
+        # In non-interactive mode, always use the default value
+        if self.non_interactive:
+            if default:
+                self.print_status(f"{message}: Using default [{default}]", None, 2)
+                return default
+            else:
+                self.print_status(f"{message}: No default value available", False, 2)
+                raise ValueError(f"Non-interactive mode requires default value for: {message}")
+        
+        # Interactive prompt
         if default:
             prompt_text = f"\033[93m{message} [{default}]: \033[0m"
         else:
@@ -200,6 +218,43 @@ class CloudXSetup:
             bool: True if successful
         """
         try:
+            # Create possible title variations for the 1Password item
+            ssh_key_title_with_prefix = f"{self.SSH_KEY_PREFIX}{self.ssh_key}"
+            ssh_key_title_without_prefix = self.ssh_key
+            
+            # First check if key exists in any vault
+            ssh_keys = list_ssh_keys()
+            
+            # Check for both prefixed and non-prefixed format
+            existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_with_prefix), None)
+            if not existing_key:
+                existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_without_prefix), None)
+            
+            if existing_key:
+                key_title = existing_key['title']
+                self.print_status(f"SSH key '{key_title}' already exists in 1Password", True, 2)
+                # Get the public key
+                result = subprocess.run(
+                    ['op', 'item', 'get', existing_key['id'], '--fields', 'public key'],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode == 0:
+                    public_key = result.stdout.strip()
+                    # Save it to the expected location
+                    if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
+                        self.print_status(f"Saved existing public key to {self.ssh_key_file}.pub", True, 2)
+                        return True
+                    else:
+                        self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
+                        return False
+                else:
+                    self.print_status(f"Failed to retrieve public key from 1Password", False, 2)
+                    return False
+            
+            # If we reach here, the key doesn't exist and we need to create it
             # Get vaults to determine where to store the key
             vaults = get_vaults()
             if not vaults:
@@ -223,54 +278,24 @@ class CloudXSetup:
             except ValueError:
                 self.print_status("Invalid input", False, 2)
                 return False
-            
-            # Create possible title variations for the 1Password item
-            ssh_key_title_with_prefix = f"cloudX SSH Key - {self.ssh_key}"
-            ssh_key_title_without_prefix = self.ssh_key
-            
-            # Check if a key with either title exists in 1Password
-            ssh_keys = list_ssh_keys()
-            
-            # First check for our prefixed format, then for a plain key with the same name
-            existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_with_prefix), None)
-            if not existing_key:
-                existing_key = next((key for key in ssh_keys if key['title'] == ssh_key_title_without_prefix), None)
-            
-            if existing_key:
-                key_title = existing_key['title']
-                self.print_status(f"SSH key '{key_title}' already exists in 1Password", True, 2)
-                # Get the public key
-                result = subprocess.run(
-                    ['op', 'item', 'get', existing_key['id'], '--fields', 'public key'],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
                 
-                if result.returncode == 0:
-                    public_key = result.stdout.strip()
-                    # Save it to the expected location
-                    if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
-                        self.print_status(f"Saved existing public key to {self.ssh_key_file}.pub", True, 2)
-                        return True
+            # Create a new SSH key in 1Password
+            self.print_status(f"Creating new SSH key '{ssh_key_title_with_prefix}' in 1Password...", None, 2)
+            success, public_key, item_id = create_ssh_key(ssh_key_title_with_prefix, selected_vault)
+            
+            if not success:
+                self.print_status("Failed to create SSH key in 1Password", False, 2)
+                return False
+            
+            self.print_status("SSH key created successfully in 1Password", True, 2)
+            
+            # Save the public key to the expected location
+            if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
+                self.print_status(f"Saved public key to {self.ssh_key_file}.pub", True, 2)
+                return True
             else:
-                # Create a new SSH key in 1Password
-                self.print_status(f"Creating new SSH key '{ssh_key_title_with_prefix}' in 1Password...", None, 2)
-                success, public_key, item_id = create_ssh_key(ssh_key_title_with_prefix, selected_vault)
-                
-                if not success:
-                    self.print_status("Failed to create SSH key in 1Password", False, 2)
-                    return False
-                
-                self.print_status("SSH key created successfully in 1Password", True, 2)
-                
-                # Save the public key to the expected location
-                if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
-                    self.print_status(f"Saved public key to {self.ssh_key_file}.pub", True, 2)
-                    return True
-                else:
-                    self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
-                    return False
+                self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
+                return False
             
             # Remind user to enable the key in 1Password SSH agent
             self.print_status("\033[93mImportant: Make sure the key is enabled in 1Password's SSH agent settings\033[0m", None, 2)

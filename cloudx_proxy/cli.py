@@ -55,7 +55,10 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option('--1password', 'use_1password', is_flag=True, help='Use 1Password SSH agent for SSH authentication')
-def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: bool):
+@click.option('--instance', help='EC2 instance ID to set up connection for')
+@click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
+def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: bool, 
+          instance: str, non_interactive: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     This command will:
@@ -69,6 +72,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
         cloudx-proxy setup --profile myprofile --ssh-key mykey
         cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
         cloudx-proxy setup --1password
+        cloudx-proxy setup --instance i-0123456789abcdef0 --yes
     """
     try:
         setup = CloudXSetup(
@@ -76,7 +80,9 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
             ssh_key=ssh_key, 
             ssh_config=ssh_config, 
             aws_env=aws_env,
-            use_1password=use_1password
+            use_1password=use_1password,
+            instance_id=instance,
+            non_interactive=non_interactive
         )
         
         print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
@@ -91,8 +97,13 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
         
         # Get environment and instance details
         cloudx_env = setup.prompt("Enter environment", getattr(setup, 'default_env', None))
-        instance_id = setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
-        hostname = setup.prompt("Enter hostname for the instance")
+        
+        # Use the --instance parameter if provided, otherwise prompt
+        instance_id = instance or setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
+        
+        # Generate a default hostname based on instance ID if we're in non-interactive mode
+        hostname_default = f"instance-{instance_id[-7:]}" if non_interactive else None
+        hostname = setup.prompt("Enter hostname for the instance", hostname_default)
         
         # Set up SSH config
         if not setup.setup_ssh_config(cloudx_env, instance_id, hostname):
