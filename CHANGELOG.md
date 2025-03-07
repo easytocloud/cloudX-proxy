@@ -1,3 +1,10 @@
+## [0.4.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.6...v0.4.7) (2025-03-07)
+
+
+### Bug Fixes
+
+* added --hostname ([0fb0aa4](https://github.com/easytocloud/cloudX-proxy/commit/0fb0aa4bfa17d58eee958d6e5ade9d9c14a11a6c))
+
 ## [0.4.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.5...v0.4.6) (2025-03-07)
 
 
