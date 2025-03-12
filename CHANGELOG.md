@@ -1,3 +1,10 @@
+## [0.4.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.11...v0.4.12) (2025-03-12)
+
+
+### Bug Fixes
+
+* improve help text formatting for example usage ([7513c51](https://github.com/easytocloud/cloudX-proxy/commit/7513c51b5cfa305f828f54d30d7f26f70a85a0b8))
+
 ## [0.4.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.10...v0.4.11) (2025-03-12)
 
 
