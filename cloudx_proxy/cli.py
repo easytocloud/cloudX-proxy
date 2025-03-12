@@ -1,5 +1,7 @@
 import os
 import sys
+import re
+from pathlib import Path
 import click
 from . import __version__
 from .core import CloudXProxy
@@ -121,6 +123,105 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
         
     except Exception as e:
         print(f"\n\033[91mError: {str(e)}\033[0m", file=sys.stderr)
+        sys.exit(1)
+
+@cli.command()
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
+@click.option('--environment', help='Filter hosts by environment (e.g., dev, prod)')
+@click.option('--detailed', is_flag=True, help='Show detailed information including instance IDs')
+def list(ssh_config: str, environment: str, detailed: bool):
+    """List configured cloudx-proxy SSH hosts.
+    
+    This command parses the SSH configuration file and displays all configured cloudx-proxy hosts.
+    Hosts are grouped by environment for easier navigation.
+    
+    Example usage:
+        cloudx-proxy list
+        cloudx-proxy list --environment dev
+        cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
+        cloudx-proxy list --detailed
+    """
+    try:
+        # Determine SSH config file path
+        if ssh_config:
+            config_file = Path(os.path.expanduser(ssh_config))
+        else:
+            config_file = Path(os.path.expanduser("~/.ssh/vscode/config"))
+        
+        if not config_file.exists():
+            print(f"SSH config file not found: {config_file}")
+            print("Run 'cloudx-proxy setup' to create a configuration.")
+            sys.exit(1)
+        
+        # Read SSH config file
+        config_content = config_file.read_text()
+        
+        # Parse hosts using regex
+        # Match Host entries for cloudx hosts
+        host_pattern = r'Host\s+(cloudx-[^\s]+)(?:\s*\n(?:(?!\s*Host\s+).)*?HostName\s+([^\s]+))?'
+        hosts = re.finditer(host_pattern, config_content, re.DOTALL)
+        
+        # Group hosts by environment
+        environments = {}
+        generic_hosts = []
+        
+        for match in hosts:
+            hostname = match.group(1)
+            instance_id = match.group(2) if match.group(2) else "N/A"
+            
+            # Skip generic patterns like cloudx-* or cloudx-dev-*
+            if hostname.endswith('*'):
+                generic_hosts.append((hostname, instance_id))
+                continue
+                
+            # Extract environment from hostname (format: cloudx-{env}-{name})
+            parts = hostname.split('-')
+            if len(parts) >= 3:
+                env = parts[1]
+                name = '-'.join(parts[2:])
+                
+                # Filter by environment if specified
+                if environment and env != environment:
+                    continue
+                    
+                if env not in environments:
+                    environments[env] = []
+                    
+                environments[env].append((hostname, name, instance_id))
+        
+        # Display results
+        if not environments and not generic_hosts:
+            print("No cloudx-proxy hosts configured.")
+            print("Run 'cloudx-proxy setup' to configure a host.")
+            return
+            
+        # Print header
+        print(f"\n\033[1;95m=== cloudx-proxy Configured Hosts ===\033[0m\n")
+        
+        # Print generic patterns if any and detailed mode
+        if generic_hosts and detailed:
+            print("\033[1;94mGeneric Patterns:\033[0m")
+            for hostname, instance_id in generic_hosts:
+                print(f"  {hostname}")
+            print()
+            
+        # Print environments and hosts
+        for env, hosts in sorted(environments.items()):
+            print(f"\033[1;94mEnvironment: {env}\033[0m")
+            for hostname, name, instance_id in sorted(hosts, key=lambda x: x[1]):
+                if detailed:
+                    print(f"  {name} \033[90m({hostname})\033[0m -> \033[93m{instance_id}\033[0m")
+                else:
+                    print(f"  {name} \033[90m({hostname})\033[0m")
+            print()
+            
+        # Print usage hint
+        print("\033[1;93mUsage:\033[0m")
+        print("  Connect with SSH:  \033[96mssh <hostname>\033[0m")
+        print("  Connect with VSCode: Use Remote Explorer in VSCode")
+        
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':

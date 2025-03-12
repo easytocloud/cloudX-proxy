@@ -279,6 +279,33 @@ uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env pr
 
 Note: The connect command is typically used through the SSH ProxyCommand configuration set up by the setup command. You rarely need to run it directly unless testing the connection.
 
+#### List Command
+```bash
+uvx cloudx-proxy list [OPTIONS]
+```
+
+Options:
+- `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/vscode/config.
+- `--environment` (optional): Filter hosts by environment (e.g., dev, prod). If not specified, shows all environments.
+- `--detailed` (flag): Show detailed information including instance IDs.
+
+Example usage:
+```bash
+# List all configured hosts
+uvx cloudx-proxy list
+
+# List hosts in a specific environment
+uvx cloudx-proxy list --environment dev
+
+# List hosts with detailed information
+uvx cloudx-proxy list --detailed
+
+# List hosts from a custom SSH config
+uvx cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
+```
+
+The list command displays all configured cloudx-proxy hosts, grouped by environment. It provides a quick overview of available connections and can help troubleshoot SSH configuration issues.
+
 ### VSCode
 
 1. Click the "Remote Explorer" icon in the VSCode sidebar
