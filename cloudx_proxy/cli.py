@@ -38,10 +38,10 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     
     Example usage:
     
-        cloudx-proxy connect i-0123456789abcdef0 22
-        cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
-        cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
-        cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
+    * cloudx-proxy connect i-0123456789abcdef0 22
+    * cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
+    * cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
+    * cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
     try:
         client = CloudXProxy(
@@ -85,12 +85,12 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
     
     Example usage:
     
-        cloudx-proxy setup
-        cloudx-proxy setup --profile myprofile --ssh-key mykey
-        cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
-        cloudx-proxy setup --1password
-        cloudx-proxy setup --1password Work
-        cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+    * cloudx-proxy setup
+    * cloudx-proxy setup --profile myprofile --ssh-key mykey
+    * cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
+    * cloudx-proxy setup --1password
+    * cloudx-proxy setup --1password Work
+    * cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
     """
     try:
         setup = CloudXSetup(
@@ -152,10 +152,10 @@ def list(ssh_config: str, environment: str, detailed: bool):
     
     Example usage:
     
-        cloudx-proxy list
-        cloudx-proxy list --environment dev
-        cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
-        cloudx-proxy list --detailed
+    * cloudx-proxy list
+    * cloudx-proxy list --environment dev
+    * cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
+    * cloudx-proxy list --detailed
     """
     try:
         # Determine SSH config file path
