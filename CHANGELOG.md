@@ -1,3 +1,10 @@
+## [0.4.13](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.12...v0.4.13) (2025-03-12)
+
+
+### Bug Fixes
+
+* improve help text formatting using Click's \b character ([3dc4230](https://github.com/easytocloud/cloudX-proxy/commit/3dc4230cfa6fef72eee7521dca77c6717772e782))
+
 ## [0.4.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.11...v0.4.12) (2025-03-12)
 
 
