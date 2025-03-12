@@ -11,16 +11,16 @@ from .setup import CloudXSetup
 @click.version_option(version=__version__)
 def cli():
     """cloudx-proxy - SSH proxy to connect VSCode Remote SSH to EC2 instances using SSM.
-    
-    This tool enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager,
-    eliminating the need for direct SSH access or public IP addresses.
-    
-    Main commands:
-    
-        setup     - Configure AWS profile, SSH keys, and SSH configuration
-        connect   - Connect to an EC2 instance via SSM
-        list      - List configured SSH hosts
-    """
+
+This tool enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager,
+eliminating the need for direct SSH access or public IP addresses.
+
+\b
+Main commands:
+\b
+  setup     - Configure AWS profile, SSH keys, and SSH configuration
+  connect   - Connect to an EC2 instance via SSM
+  list      - List configured SSH hosts"""
     pass
 
 @cli.command()
@@ -36,12 +36,13 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
     
+    \b
     Example usage:
-    
-    * cloudx-proxy connect i-0123456789abcdef0 22
-    * cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
-    * cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
-    * cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
+    \b
+    cloudx-proxy connect i-0123456789abcdef0 22
+    cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
+    cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
+    cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
     try:
         client = CloudXProxy(
@@ -76,21 +77,23 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
           instance: str, hostname: str, non_interactive: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
+    \b
     This command will:
-    
+    \b
     1. Set up AWS profile with credentials
     2. Create or use existing SSH key
     3. Configure SSH for CloudX instances
     4. Check instance setup status
     
+    \b
     Example usage:
-    
-    * cloudx-proxy setup
-    * cloudx-proxy setup --profile myprofile --ssh-key mykey
-    * cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
-    * cloudx-proxy setup --1password
-    * cloudx-proxy setup --1password Work
-    * cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+    \b
+    cloudx-proxy setup
+    cloudx-proxy setup --profile myprofile --ssh-key mykey
+    cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
+    cloudx-proxy setup --1password
+    cloudx-proxy setup --1password Work
+    cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
     """
     try:
         setup = CloudXSetup(
@@ -150,12 +153,13 @@ def list(ssh_config: str, environment: str, detailed: bool):
     This command parses the SSH configuration file and displays all configured cloudx-proxy hosts.
     Hosts are grouped by environment for easier navigation.
     
+    \b
     Example usage:
-    
-    * cloudx-proxy list
-    * cloudx-proxy list --environment dev
-    * cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
-    * cloudx-proxy list --detailed
+    \b
+    cloudx-proxy list
+    cloudx-proxy list --environment dev
+    cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
+    cloudx-proxy list --detailed
     """
     try:
         # Determine SSH config file path
