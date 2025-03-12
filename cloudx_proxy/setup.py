@@ -402,6 +402,10 @@ class CloudXSetup:
             proxy_command += f" --aws-env {self.aws_env}"
         if self.ssh_key != "vscode":
             proxy_command += f" --ssh-key {self.ssh_key}"
+        # Add ssh_config parameter if it's not the default
+        default_config = Path(os.path.expanduser("~/.ssh/vscode/config"))
+        if str(self.ssh_config_file) != str(default_config):
+            proxy_command += f" --ssh-config {self.ssh_config_file}"
             
         return proxy_command
         
