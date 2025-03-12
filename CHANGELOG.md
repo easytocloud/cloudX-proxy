@@ -1,3 +1,10 @@
+## [0.4.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.9...v0.4.10) (2025-03-12)
+
+
+### Bug Fixes
+
+* non-default ssh-config directory passed in connect ([c84963c](https://github.com/easytocloud/cloudX-proxy/commit/c84963c43544bc9de5410a96502469d64ef4bb4f))
+
 ## [0.4.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.8...v0.4.9) (2025-03-12)
 
 
