@@ -1,3 +1,10 @@
+## [0.4.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.8...v0.4.9) (2025-03-12)
+
+
+### Bug Fixes
+
+* added list command ([76e43e4](https://github.com/easytocloud/cloudX-proxy/commit/76e43e449ec2f704475014f95d0a345e322be8e8))
+
 ## [0.4.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.7...v0.4.8) (2025-03-07)
 
 ## [0.4.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.6...v0.4.7) (2025-03-07)
