@@ -10,7 +10,17 @@ from .setup import CloudXSetup
 @click.group()
 @click.version_option(version=__version__)
 def cli():
-    """cloudx-proxy - SSH proxy to connect VSCode Remote SSH to EC2 instances using SSM."""
+    """cloudx-proxy - SSH proxy to connect VSCode Remote SSH to EC2 instances using SSM.
+    
+    This tool enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager,
+    eliminating the need for direct SSH access or public IP addresses.
+    
+    Main commands:
+    
+        setup     - Configure AWS profile, SSH keys, and SSH configuration
+        connect   - Connect to an EC2 instance via SSM
+        list      - List configured SSH hosts
+    """
     pass
 
 @cli.command()
@@ -27,9 +37,11 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
     
     Example usage:
-        cloudx-proxy i-0123456789abcdef0 22
-        cloudx-proxy i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
-        cloudx-proxy i-0123456789abcdef0 22 --aws-env prod
+    
+        cloudx-proxy connect i-0123456789abcdef0 22
+        cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --region eu-west-1
+        cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
+        cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
     try:
         client = CloudXProxy(
@@ -56,25 +68,28 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-@click.option('--1password', 'use_1password', is_flag=True, help='Use 1Password SSH agent for SSH authentication')
+@click.option('--1password', 'use_1password', default=None, help='Use 1Password SSH agent for SSH authentication. Optionally specify vault name (default: "Private")')
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
-def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: bool, 
+def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str, 
           instance: str, hostname: str, non_interactive: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     This command will:
+    
     1. Set up AWS profile with credentials
     2. Create or use existing SSH key
     3. Configure SSH for CloudX instances
     4. Check instance setup status
     
     Example usage:
+    
         cloudx-proxy setup
         cloudx-proxy setup --profile myprofile --ssh-key mykey
         cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
         cloudx-proxy setup --1password
+        cloudx-proxy setup --1password Work
         cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
     """
     try:
@@ -136,6 +151,7 @@ def list(ssh_config: str, environment: str, detailed: bool):
     Hosts are grouped by environment for easier navigation.
     
     Example usage:
+    
         cloudx-proxy list
         cloudx-proxy list --environment dev
         cloudx-proxy list --ssh-config ~/.ssh/cloudx/config

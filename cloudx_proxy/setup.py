@@ -14,7 +14,7 @@ class CloudXSetup:
     SSH_KEY_PREFIX = "cloudX SSH Key - "
     
     def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
-                 aws_env: str = None, use_1password: bool = False, instance_id: str = None, 
+                 aws_env: str = None, use_1password: str = None, instance_id: str = None, 
                  non_interactive: bool = False):
         """Initialize cloudx-proxy setup.
         
@@ -23,14 +23,24 @@ class CloudXSetup:
             ssh_key: SSH key name (default: "vscode")
             ssh_config: SSH config file path (default: None, uses ~/.ssh/vscode/config)
             aws_env: AWS environment directory (default: None)
-            use_1password: Use 1Password SSH agent for authentication (default: False)
+            use_1password: Use 1Password SSH agent for authentication. Can be True/False or a vault name (default: None)
             instance_id: EC2 instance ID to set up connection for (optional)
             non_interactive: Non-interactive mode, use defaults for all prompts (default: False)
         """
         self.profile = profile
         self.ssh_key = ssh_key
         self.aws_env = aws_env
-        self.use_1password = use_1password
+        
+        # Handle 1Password integration
+        if use_1password is None:
+            self.use_1password = False
+            self.op_vault = None
+        elif isinstance(use_1password, bool) or use_1password.lower() == 'true':
+            self.use_1password = True
+            self.op_vault = "Private"  # Default vault
+        else:
+            self.use_1password = True
+            self.op_vault = use_1password
         self.instance_id = instance_id
         self.non_interactive = non_interactive
         self.home_dir = str(Path.home())
@@ -209,6 +219,13 @@ class CloudXSetup:
             return False
         
         self.print_status("1Password SSH agent is running", True, 2)
+        
+        # If using a vault other than "Private", warn the user
+        if self.op_vault and self.op_vault != "Private":
+            self.print_status(f"\033[93mWarning: Using vault '{self.op_vault}' instead of default 'Private' vault\033[0m", None, 2)
+            self.print_status("\033[93mMake sure to enable this vault for SSH in 1Password settings\033[0m", None, 2)
+            self.print_status("\033[93mBy default, only the 'Private' vault is enabled for SSH\033[0m", None, 2)
+        
         return True
 
     def _create_1password_key(self) -> bool:
@@ -261,23 +278,55 @@ class CloudXSetup:
                 self.print_status("No 1Password vaults found", False, 2)
                 return False
             
-            # Display available vaults
-            self.print_status("Creating a new SSH key in 1Password", None, 2)
-            print("\n\033[96mAvailable 1Password vaults:\033[0m")
-            for i, vault in enumerate(vaults):
-                print(f"  {i+1}. {vault['name']}")
-            
-            # Let user select vault
-            vault_num = self.prompt("Select vault number to store SSH key", "1")
-            try:
-                vault_idx = int(vault_num) - 1
-                if vault_idx < 0 or vault_idx >= len(vaults):
-                    self.print_status("Invalid vault number", False, 2)
+            # Use the specified vault or prompt the user to select one
+            if self.op_vault:
+                # Find the vault by name
+                selected_vault = None
+                for vault in vaults:
+                    if vault['name'].lower() == self.op_vault.lower():
+                        selected_vault = vault['id']
+                        self.print_status(f"Using specified 1Password vault: {self.op_vault}", True, 2)
+                        break
+                
+                # If the specified vault wasn't found, warn the user and prompt for selection
+                if not selected_vault:
+                    self.print_status(f"Specified vault '{self.op_vault}' not found", False, 2)
+                    
+                    # Display available vaults
+                    self.print_status("Available 1Password vaults:", None, 2)
+                    print("\n\033[96mAvailable 1Password vaults:\033[0m")
+                    for i, vault in enumerate(vaults):
+                        print(f"  {i+1}. {vault['name']}")
+                    
+                    # Let user select vault
+                    vault_num = self.prompt("Select vault number to store SSH key", "1")
+                    try:
+                        vault_idx = int(vault_num) - 1
+                        if vault_idx < 0 or vault_idx >= len(vaults):
+                            self.print_status("Invalid vault number", False, 2)
+                            return False
+                        selected_vault = vaults[vault_idx]['id']
+                    except ValueError:
+                        self.print_status("Invalid input", False, 2)
+                        return False
+            else:
+                # No vault specified, prompt the user
+                self.print_status("Creating a new SSH key in 1Password", None, 2)
+                print("\n\033[96mAvailable 1Password vaults:\033[0m")
+                for i, vault in enumerate(vaults):
+                    print(f"  {i+1}. {vault['name']}")
+                
+                # Let user select vault
+                vault_num = self.prompt("Select vault number to store SSH key", "1")
+                try:
+                    vault_idx = int(vault_num) - 1
+                    if vault_idx < 0 or vault_idx >= len(vaults):
+                        self.print_status("Invalid vault number", False, 2)
+                        return False
+                    selected_vault = vaults[vault_idx]['id']
+                except ValueError:
+                    self.print_status("Invalid input", False, 2)
                     return False
-                selected_vault = vaults[vault_idx]['id']
-            except ValueError:
-                self.print_status("Invalid input", False, 2)
-                return False
                 
             # Create a new SSH key in 1Password
             self.print_status(f"Creating new SSH key '{ssh_key_title_with_prefix}' in 1Password...", None, 2)

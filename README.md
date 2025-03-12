@@ -225,7 +225,7 @@ Options:
 - `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.
 - `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in the SSH config directory. This same name can be used in the connect command.
 - `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/vscode/config.
-- `--1password` (flag): Enable 1Password SSH agent integration. Creates keys directly in 1Password and configures SSH to use the 1Password SSH agent.
+- `--1password` (optional): Enable 1Password SSH agent integration. Can be used as a flag or with a vault name (e.g., `--1password Private`). Creates keys directly in 1Password and configures SSH to use the 1Password SSH agent. If a vault name is specified, that vault will be used for key storage. By default, the "Private" vault is used. Note that only the "Private" vault is enabled for SSH by default in 1Password settings.
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
 - `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
@@ -239,8 +239,11 @@ uvx cloudx-proxy setup
 # Setup with custom profile and key
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
 
-# Setup with custom SSH config and 1Password integration
+# Setup with custom SSH config and 1Password integration (uses default "Private" vault)
 uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config --1password
+
+# Setup with 1Password integration using a specific vault
+uvx cloudx-proxy setup --1password Work
 
 # Complete setup with all options
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
@@ -362,6 +365,8 @@ These permissions are required to bootstrap the instance, so that after creation
      * SSH agent is enabled in 1Password settings
      * Keys are added to the SSH agent in 1Password
      * The key is visible with `op item list --categories "SSH Key"`
+     * If using a vault other than "Private", ensure that vault is enabled for SSH in 1Password settings
+     * By default, only the "Private" vault is enabled for SSH in 1Password
 
 4. **AWS Configuration**
    - Confirm AWS CLI is configured with valid credentials
