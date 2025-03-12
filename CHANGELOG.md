@@ -1,3 +1,10 @@
+## [0.4.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.10...v0.4.11) (2025-03-12)
+
+
+### Bug Fixes
+
+* pass --ssh-config in generated connect command and enhance 1Password integration ([1036c2f](https://github.com/easytocloud/cloudX-proxy/commit/1036c2f029c75943328083b9b14787493309f3a1))
+
 ## [0.4.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.9...v0.4.10) (2025-03-12)
 
 
