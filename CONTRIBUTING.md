@@ -18,9 +18,11 @@ The package is automatically published to PyPI via GitHub Actions when a new rel
 
 ## Versioning
 
-The project uses semantic-release for versioning, starting at version 2025.1.0. Version numbers are automatically determined based on commit messages following the conventional commits specification.
+The project uses semantic-release for versioning. 
+Version numbers are automatically determined based on commit messages following the conventional commits specification.
 
 The GitHub Actions workflow will:
+
 1. Determine next version based on commits
 2. Update CHANGELOG.md
 3. Create GitHub release

@@ -1,0 +1,122 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+cloudX-proxy is a Python CLI tool that enables SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager. It eliminates the need for direct SSH access or public IP addresses by creating secure tunnels through AWS SSM.
+
+### Core Architecture
+
+The application consists of three main modules:
+
+- **`cli.py`**: Click-based command-line interface with three main commands:
+  - `setup`: Configure AWS profiles, SSH keys, and SSH configuration
+  - `connect`: Establish connection to EC2 instance via SSM (used internally by SSH)
+  - `list`: Display configured SSH hosts
+
+- **`core.py`**: `CloudXProxy` class that handles the connection workflow:
+  1. Check instance status via SSM
+  2. Start instance if needed and wait for online status
+  3. Push SSH public key via EC2 Instance Connect
+  4. Start SSM session with SSH port forwarding
+
+- **`setup.py`**: `CloudXSetup` class that implements a comprehensive setup wizard with three-tier SSH configuration
+
+### SSH Configuration Architecture
+
+The setup creates a hierarchical three-tier SSH configuration:
+
+1. **Generic (cloudx-*)**: Common settings for all environments (user, keepalive, multiplexing)
+2. **Environment (cloudx-{env}-*)**: Environment-specific settings (authentication, ProxyCommand)
+3. **Host (cloudx-{env}-hostname)**: Instance-specific settings (HostName = instance ID)
+
+This approach minimizes duplication and creates clear inheritance patterns.
+
+### Security Model
+
+Primary security is enforced through AWS IAM/SSM rather than SSH:
+- AWS Systems Manager controls access via IAM permissions
+- EC2 Instance Connect temporarily injects SSH public keys per session
+- No inbound SSH ports needed - all traffic flows through SSM tunneling
+- CloudTrail logs all connection attempts and key pushes
+
+## Development Commands
+
+### Building and Installing
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Build package
+python -m build
+
+# Install from built package
+pip install dist/cloudx_proxy-*.whl
+```
+
+### Running the Application
+
+The application is designed to be run via `uvx` (from the `uv` package manager):
+
+```bash
+# Setup (interactive)
+uvx cloudx-proxy setup
+
+# Setup (non-interactive with parameters)
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --instance i-123456789 --hostname myserver --yes
+
+# Connect (typically called by SSH ProxyCommand, not directly)
+uvx cloudx-proxy connect i-123456789 22 --profile myprofile
+
+# List configured hosts
+uvx cloudx-proxy list
+```
+
+### Release Process
+
+The project uses semantic-release with GitHub Actions:
+
+- **Automatic versioning**: Based on conventional commit messages
+- **Release triggers**: Pushes to `main` branch
+- **Artifacts**: GitHub releases, PyPI packages, CHANGELOG.md updates
+
+Commit message format affects version bumps:
+- `feat:` → minor version
+- `fix:`, `docs:`, `style:`, etc. → patch version
+
+### 1Password Integration
+
+When `--1password` is used:
+- Checks for existing SSH keys in any 1Password vault
+- Creates new keys in user-selected vault if needed
+- Configures SSH to use 1Password SSH agent (`IdentityAgent ~/.1password/agent.sock`)
+- Uses public key file to limit SSH agent key search (`IdentitiesOnly yes`)
+
+### AWS Environment Support
+
+The `--aws-env` parameter enables AWS profile organization:
+- Looks for credentials in `~/.aws/aws-envs/{env}/` instead of `~/.aws/`
+- Sets `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` environment variables
+- Supports multiple isolated AWS environments
+
+## Key Configuration Files
+
+- **`pyproject.toml`**: Python packaging configuration with semantic versioning via setuptools_scm
+- **`.releaserc`**: Semantic-release configuration with conventional commits and changelog generation
+- **`.github/workflows/release.yml`**: CI/CD pipeline for automated releases to PyPI
+- **`.clinerules`**: Detailed project documentation including architecture and operating modes
+
+## Code Quality Notes
+
+- Uses modern Python features (pathlib, type hints, f-strings)
+- Supports Python 3.9+ (recently updated from 3.8+)
+- No test suite currently exists
+- Uses Click for CLI with proper help text and option validation
+- Implements comprehensive error handling with user-friendly messages
+- Cross-platform support (Windows, macOS, Linux) with platform-specific adjustments
+
+## Known Issues
+
+- No automated testing framework configured
