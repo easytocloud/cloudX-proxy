@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.5.3...v0.6.0) (2025-08-22)
+
+
+### Features
+
+* add project badges and modernize Python version support ([594bb87](https://github.com/easytocloud/cloudX-proxy/commit/594bb870a7a58ef3c99c46e24cf1843249945a77))
+
 ## [0.5.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.5.2...v0.5.3) (2025-08-22)
 
 ## [0.5.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.5.1...v0.5.2) (2025-08-22)
