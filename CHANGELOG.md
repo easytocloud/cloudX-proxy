@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.13...v0.5.0) (2025-08-22)
+
+
+### Features
+
+* dependabot ([3b78503](https://github.com/easytocloud/cloudX-proxy/commit/3b785034632b5998b6bccf3ca298a70d57f87a30))
+
 ## [0.4.13](https://github.com/easytocloud/cloudX-proxy/compare/v0.4.12...v0.4.13) (2025-03-12)
 
 
