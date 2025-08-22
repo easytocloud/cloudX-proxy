@@ -1,5 +1,12 @@
 # cloudX-proxy
 
+[![PyPI Version](https://img.shields.io/pypi/v/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
+[![Python Support](https://img.shields.io/pypi/pyversions/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
+[![License](https://img.shields.io/github/license/easytocloud/cloudX-proxy.svg)](https://github.com/easytocloud/cloudX-proxy/blob/main/LICENSE)
+[![Release](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
+[![Dependabot](https://img.shields.io/badge/dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/easytocloud/cloudX-proxy/network/updates)
+[![Downloads](https://img.shields.io/pypi/dm/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
+
 A cross-platform SSH proxy command for connecting VSCode to CloudX/Cloud9 EC2 instances using AWS Systems Manager Session Manager.
 
 ## Overview
