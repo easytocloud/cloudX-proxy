@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.6.0...v0.6.1) (2025-08-22)
+
+
+### Bug Fixes
+
+* clean up versioning configuration and remove unnecessary package.json ([62af606](https://github.com/easytocloud/cloudX-proxy/commit/62af606f57367948845fc16863e196207b92645d))
+
 # [0.6.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.5.3...v0.6.0) (2025-08-22)
 
 
