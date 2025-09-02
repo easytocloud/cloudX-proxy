@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.7.0...v0.8.0) (2025-09-02)
+
+
+### Features
+
+* add comprehensive license compliance with liccheck integration ([611e49b](https://github.com/easytocloud/cloudX-proxy/commit/611e49bba0465eb9c4c80bfe2122240479ac3aa4))
+
 # [0.7.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.6.1...v0.7.0) (2025-09-02)
 
 
