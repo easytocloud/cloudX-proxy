@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.6.1...v0.7.0) (2025-09-02)
+
+
+### Features
+
+* add pip-audit security scanning to CI/CD pipeline ([3ded9bb](https://github.com/easytocloud/cloudX-proxy/commit/3ded9bbeaeee0e25cb3ca981ca0204faf4735ca7))
+
 ## [0.6.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.6.0...v0.6.1) (2025-08-22)
 
 
