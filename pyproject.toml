@@ -46,3 +46,47 @@ cloudx-proxy = "cloudx_proxy.cli:cli"
 write_to = "cloudx_proxy/_version.py"
 version_scheme = "semver"
 local_scheme = "no-local-version"
+
+[tool.liccheck]
+# MIT-compatible licenses for cloudX-proxy (MIT License)
+authorized_licenses = [
+    # MIT and MIT-compatible
+    "MIT",
+    "MIT License",
+    
+    # BSD licenses (MIT-compatible)
+    "BSD",
+    "BSD License", 
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "New BSD",
+    "new bsd",
+    "bsd license",
+    
+    # Apache licenses (MIT-compatible)
+    "Apache Software",
+    "Apache License", 
+    "Apache-2.0",
+    "Apache 2.0",
+    
+    # Other MIT-compatible licenses
+    "Mozilla Public License 2.0 (MPL 2.0)",
+    "Python Software Foundation",
+    "The Unlicense (Unlicense)"
+]
+
+# Licenses incompatible with MIT
+unauthorized_licenses = [
+    "GPL v2",
+    "GPL v3", 
+    "gpl v3",
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL",
+    "LGPL",
+    "Copyleft"
+]
+
+[tool.liccheck.authorized_packages]
+# Allow specific packages with compatible licenses
+uuid = "<=1.30"

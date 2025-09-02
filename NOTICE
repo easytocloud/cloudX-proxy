@@ -1,0 +1,71 @@
+cloudX-proxy
+Copyright (c) 2025 easytocloud
+
+This project is licensed under the MIT License. See LICENSE file for details.
+
+This project includes dependencies with the following licenses:
+
+================================================================================
+Apache License 2.0
+================================================================================
+
+The following components are licensed under the Apache License 2.0:
+- boto3: AWS SDK for Python
+- botocore: Low-level, core functionality of boto3
+- s3transfer: Amazon S3 Transfer Manager for Python
+- liccheck: Check python packages from requirement.txt and report issues
+- pip-audit: A tool for scanning Python packages for known vulnerabilities
+- cyclonedx-python-lib: Python library for CycloneDX
+- requests: HTTP library for Python
+- pip-api: An unofficial, importable pip API
+- py-serializable: Library for serializing and deserializing Python objects
+- sortedcontainers: Pure Python sorted container types
+- cachecontrol: httplib2 caching for requests
+- license-expression: Utility library to parse, normalize and compare License expressions
+
+================================================================================
+MIT License
+================================================================================
+
+The following components are licensed under the MIT License:
+- click: Composable command line interface toolkit
+- jmespath: JSON Matching Expressions
+- six: Python 2 and 3 compatibility utilities
+- charset-normalizer: Character encoding normalizer
+- urllib3: HTTP library with thread-safe connection pooling
+- setuptools: Easily download, build, install, upgrade, and uninstall Python packages
+- toml: Python Library for Tom's Obvious, Minimal Language
+- pip: The PyPA recommended tool for installing Python packages
+- rich: Rich text and beautiful formatting in the terminal
+- markdown-it-py: Markdown parser
+- mdurl: URL utilities for markdown-it
+- packageurl-python: Python implementation of Package URL
+- pip-requirements-parser: Python library for parsing requirements.txt files
+- platformdirs: A small Python module for determining appropriate platform dirs
+- pyparsing: Python parsing module
+
+================================================================================
+BSD License
+================================================================================
+
+The following components are licensed under various BSD licenses:
+- click: BSD-3-Clause
+- boolean-py: BSD-2-Clause
+
+================================================================================
+Other Licenses
+================================================================================
+
+The following components are licensed under other compatible licenses:
+- certifi: Mozilla Public License 2.0 (MPL 2.0)
+- defusedxml: Python Software Foundation License
+- python-dateutil: Dual License (Apache 2.0 / BSD-3-Clause)
+- filelock: The Unlicense
+
+================================================================================
+
+For detailed license information, please refer to the individual package 
+documentation and license files.
+
+The combination of all these licenses is compatible with the MIT License under 
+which this project is distributed.

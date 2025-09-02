@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/github/license/easytocloud/cloudX-proxy.svg)](https://github.com/easytocloud/cloudX-proxy/blob/main/LICENSE)
 [![Release](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
 [![Security Audit](https://img.shields.io/badge/security-pip--audit-blue?logo=python)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
+[![License Check](https://img.shields.io/badge/license-MIT%20compatible-green?logo=legal)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
 [![Dependabot](https://img.shields.io/badge/dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/easytocloud/cloudX-proxy/network/updates)
 [![Downloads](https://img.shields.io/pypi/dm/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
 
