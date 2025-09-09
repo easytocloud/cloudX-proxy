@@ -48,7 +48,7 @@ class CloudXProxy:
             self.ec2_connect = None
             if not region:
                 region = 'eu-west-1'  # Default for dry-run display
-        
+        self.region = region
         # Set up SSH configuration and key paths
         if ssh_config:
             self.ssh_config_file = os.path.expanduser(ssh_config)
