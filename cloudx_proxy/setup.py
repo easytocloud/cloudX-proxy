@@ -15,7 +15,7 @@ class CloudXSetup:
     
     def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
                  aws_env: str = None, use_1password: str = None, instance_id: str = None, 
-                 non_interactive: bool = False):
+                 non_interactive: bool = False, dry_run: bool = False):
         """Initialize cloudx-proxy setup.
         
         Args:
@@ -26,6 +26,7 @@ class CloudXSetup:
             use_1password: Use 1Password SSH agent for authentication. Can be True/False or a vault name (default: None)
             instance_id: EC2 instance ID to set up connection for (optional)
             non_interactive: Non-interactive mode, use defaults for all prompts (default: False)
+            dry_run: Preview mode, show what would be done without executing (default: False)
         """
         self.profile = profile
         self.ssh_key = ssh_key
@@ -43,6 +44,7 @@ class CloudXSetup:
             self.op_vault = use_1password
         self.instance_id = instance_id
         self.non_interactive = non_interactive
+        self.dry_run = dry_run
         self.home_dir = str(Path.home())
         self.onepassword_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         
@@ -134,6 +136,13 @@ class CloudXSetup:
         Returns:
             bool: True if profile was set up successfully or user chose to continue
         """
+        if self.dry_run:
+            self.print_status(f"[DRY RUN] Would check AWS profile configuration for '{self.profile}'")
+            if self.aws_env:
+                self.print_status(f"[DRY RUN] Would configure AWS environment: {self.aws_env}", None, 2)
+            self.print_status(f"[DRY RUN] Would verify AWS credentials and extract cloudX environment", None, 2)
+            return True
+            
         self.print_status("Checking AWS profile configuration...")
         
         try:
@@ -361,6 +370,16 @@ class CloudXSetup:
             bool: True if key was set up successfully
         """
         self.print_header("SSH Key Configuration")
+        
+        if self.dry_run:
+            self.print_status(f"[DRY RUN] Would check SSH key '{self.ssh_key}' configuration")
+            if self.use_1password:
+                self.print_status(f"[DRY RUN] Would use 1Password SSH agent for authentication", None, 2)
+                self.print_status(f"[DRY RUN] Would create or find SSH key in vault: {self.op_vault}", None, 2)
+            else:
+                self.print_status(f"[DRY RUN] Would create SSH key pair at: {self.ssh_key_file}", None, 2)
+                self.print_status(f"[DRY RUN] Would set proper file permissions", None, 2)
+            return True
         
         # Check 1Password integration if requested
         if self.use_1password:
@@ -790,6 +809,15 @@ Host cloudx-{cloudx_env}-{hostname}
             bool: True if config was set up successfully
         """
         self.print_header("SSH Configuration")
+        
+        if self.dry_run:
+            self.print_status(f"[DRY RUN] Would set up SSH configuration with three-tier approach")
+            self.print_status(f"[DRY RUN] Would create generic pattern: cloudx-*", None, 2)
+            self.print_status(f"[DRY RUN] Would create environment pattern: cloudx-{cloudx_env}-*", None, 2)
+            self.print_status(f"[DRY RUN] Would create host entry: cloudx-{cloudx_env}-{hostname} -> {instance_id}", None, 2)
+            self.print_status(f"[DRY RUN] Would write configuration to: {self.ssh_config_file}", None, 2)
+            return True
+        
         self.print_status("Setting up SSH configuration with three-tier approach...")
         
         try:
@@ -952,6 +980,12 @@ Host cloudx-{cloudx_env}-{hostname}
             bool: True if instance is accessible or user chose to continue
         """
         self.print_header("Instance Access Check")
+        
+        if self.dry_run:
+            self.print_status(f"[DRY RUN] Would check instance accessibility for: {hostname}")
+            self.print_status(f"[DRY RUN] Would test connection to instance: {instance_id}", None, 2)
+            self.print_status(f"[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
+            return True
         
         if self.check_instance_setup(instance_id, hostname, cloudx_env):
             return True

@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode", 
-                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None):
+                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None, dry_run: bool = False):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -17,10 +17,12 @@ class CloudXProxy:
             region: AWS region (default: from profile)
             ssh_key: SSH key name to use (default: "vscode")
             aws_env: AWS environment directory (default: None, uses ~/.aws)
+            dry_run: Preview mode, show what would be done without executing (default: False)
         """
         self.instance_id = instance_id
         self.port = port
         self.profile = profile
+        self.dry_run = dry_run
         
         # Configure AWS environment
         if aws_env:
@@ -28,16 +30,24 @@ class CloudXProxy:
             os.environ["AWS_CONFIG_FILE"] = os.path.join(aws_env_dir, "config")
             os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.path.join(aws_env_dir, "credentials")
         
-        # Set up AWS session with eu-west-1 as default region
-        if not region:
-            # Try to get region from profile first
-            session = boto3.Session(profile_name=profile)
-            region = session.region_name or 'eu-west-1'
-        
-        self.session = boto3.Session(profile_name=profile, region_name=region)
-        self.ssm = self.session.client('ssm')
-        self.ec2 = self.session.client('ec2')
-        self.ec2_connect = self.session.client('ec2-instance-connect')
+        # Set up AWS session with eu-west-1 as default region (skip in dry-run mode)
+        if not self.dry_run:
+            if not region:
+                # Try to get region from profile first
+                session = boto3.Session(profile_name=profile)
+                region = session.region_name or 'eu-west-1'
+            
+            self.session = boto3.Session(profile_name=profile, region_name=region)
+            self.ssm = self.session.client('ssm')
+            self.ec2 = self.session.client('ec2')
+            self.ec2_connect = self.session.client('ec2-instance-connect')
+        else:
+            self.session = None
+            self.ssm = None
+            self.ec2 = None
+            self.ec2_connect = None
+            if not region:
+                region = 'eu-west-1'  # Default for dry-run display
         
         # Set up SSH configuration and key paths
         if ssh_config:
@@ -55,6 +65,9 @@ class CloudXProxy:
 
     def get_instance_status(self) -> str:
         """Check if instance is online in SSM."""
+        if self.dry_run:
+            return 'Online'  # Simulate online status for dry-run
+            
         try:
             response = self.ssm.describe_instance_information(
                 Filters=[{'Key': 'InstanceIds', 'Values': [self.instance_id]}]
@@ -67,6 +80,10 @@ class CloudXProxy:
 
     def start_instance(self) -> bool:
         """Start the EC2 instance if it's stopped."""
+        if self.dry_run:
+            self.log(f"[DRY RUN] Would start EC2 instance: {self.instance_id}")
+            return True
+            
         try:
             self.ec2.start_instances(InstanceIds=[self.instance_id])
             return True
@@ -84,6 +101,10 @@ class CloudXProxy:
         Returns:
             bool: True if instance came online, False if timeout
         """
+        if self.dry_run:
+            self.log(f"[DRY RUN] Would wait for instance to come online (max {max_attempts * delay} seconds)")
+            return True
+            
         for _ in range(max_attempts):
             if self.get_instance_status() == 'Online':
                 return True
@@ -96,6 +117,14 @@ class CloudXProxy:
         Determines which SSH key to use (regular key or 1Password-managed key),
         then pushes the correct public key to the instance.
         """
+        if self.dry_run:
+            key_path = self.ssh_key
+            if not key_path.endswith('.pub'):
+                key_path += '.pub'
+            self.log(f"[DRY RUN] Would push SSH public key: {key_path}")
+            self.log(f"[DRY RUN] Would send key to instance {self.instance_id} as ec2-user")
+            return True
+            
         try:
             # Check if file exists with .pub extension (could be a non-1Password key)
             # or if the .pub extension is already part of self.ssh_key (because of 1Password integration)
@@ -129,6 +158,12 @@ class CloudXProxy:
         2. Only use stderr for logging
         3. Let the session manager plugin handle the actual data transfer
         """
+        if self.dry_run:
+            region = 'eu-west-1'  # Default region for dry-run display
+            self.log(f"[DRY RUN] Would start SSM session with SSH port forwarding")
+            self.log(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
+            return
+            
         import subprocess
         import platform
         
@@ -185,6 +220,15 @@ class CloudXProxy:
         3. Push SSH key
         4. Start SSM session
         """
+        if self.dry_run:
+            self.log(f"[DRY RUN] Connection workflow preview:")
+            self.log(f"[DRY RUN] Would check instance status: {self.instance_id}")
+            self.log(f"[DRY RUN] Would start instance if stopped")
+            self.log(f"[DRY RUN] Would wait for instance to come online")
+            self.log(f"[DRY RUN] Would push SSH key to instance")
+            self.log(f"[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
+            return True
+            
         status = self.get_instance_status()
         
         if status != 'Online':
