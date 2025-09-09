@@ -177,8 +177,8 @@ def list(ssh_config: str, environment: str, detailed: bool):
         config_content = config_file.read_text()
         
         # Parse hosts using regex
-        # Match Host entries for cloudx hosts
-        host_pattern = r'Host\s+(cloudx-[^\s]+)(?:\s*\n(?:(?!\s*Host\s+).)*?HostName\s+([^\s]+))?'
+        # Match Host entries for cloudx hosts (case-insensitive)
+        host_pattern = r'Host\s+(cloud[xX]-[^\s]+)(?:\s*\n(?:(?!\s*Host\s+).)*?(?i:hostname)\s+([^\s]+))?'
         hosts = re.finditer(host_pattern, config_content, re.DOTALL)
         
         # Group hosts by environment

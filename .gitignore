@@ -27,6 +27,7 @@ cloudx_client/_version.py
 venv/
 env/
 ENV/
+.direnv/
 
 # IDE
 .idea/

@@ -117,6 +117,26 @@ The `--aws-env` parameter enables AWS profile organization:
 - Implements comprehensive error handling with user-friendly messages
 - Cross-platform support (Windows, macOS, Linux) with platform-specific adjustments
 
-## Known Issues
+## Code Quality and Architecture
 
+### Current State
 - No automated testing framework configured
+- Monolithic CloudXSetup class (983 lines) violating SRP
+- Limited type coverage (~60%) and error handling
+- Security vulnerabilities in subprocess handling
+- High technical debt impacting maintainability
+
+### Improvement Documentation
+For comprehensive analysis and improvement plans, see:
+- **[ARCHITECTURE_REVIEW.md](./ARCHITECTURE_REVIEW.md)** - Detailed code quality analysis and security review
+- **[IMPROVEMENT_ROADMAP.md](./IMPROVEMENT_ROADMAP.md)** - 6-phase improvement plan with timeline and priorities
+
+### Development Standards
+When working on this codebase, prioritize:
+1. **Type safety** - Add complete type hints to new code
+2. **Single responsibility** - Keep classes and methods focused
+3. **Error handling** - Use specific exceptions with context
+4. **Testing** - Write tests for new functionality (when framework exists)
+5. **Security** - Validate all inputs and sanitize subprocess calls
+
+## Known Issues
