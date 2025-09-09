@@ -31,7 +31,8 @@ Main commands:
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, aws_env: str):
+@click.option('--dry-run', is_flag=True, help='Preview connection workflow without executing')
+def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, aws_env: str, dry_run: bool):
     """Connect to an EC2 instance via SSM.
     
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
@@ -52,7 +53,8 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             region=region,
             ssh_key=ssh_key,
             ssh_config=ssh_config,
-            aws_env=aws_env
+            aws_env=aws_env,
+            dry_run=dry_run
         )
         
         client.log(f"cloudx-proxy@{__version__} Connecting to instance {instance_id} on port {port}...")
@@ -73,8 +75,9 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
+@click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
 def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str, 
-          instance: str, hostname: str, non_interactive: bool):
+          instance: str, hostname: str, non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     \b
@@ -103,10 +106,14 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
             aws_env=aws_env,
             use_1password=use_1password,
             instance_id=instance,
-            non_interactive=non_interactive
+            non_interactive=non_interactive,
+            dry_run=dry_run
         )
         
-        print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
+        if dry_run:
+            print("\n\033[1;95m=== cloudx-proxy Setup (DRY RUN) ===\033[0m\n")
+        else:
+            print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
         
         # Set up AWS profile
         if not setup.setup_aws_profile():
@@ -147,7 +154,8 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--environment', help='Filter hosts by environment (e.g., dev, prod)')
 @click.option('--detailed', is_flag=True, help='Show detailed information including instance IDs')
-def list(ssh_config: str, environment: str, detailed: bool):
+@click.option('--dry-run', is_flag=True, help='Preview list output format')
+def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
     """List configured cloudx-proxy SSH hosts.
     
     This command parses the SSH configuration file and displays all configured cloudx-proxy hosts.
@@ -167,6 +175,16 @@ def list(ssh_config: str, environment: str, detailed: bool):
             config_file = Path(os.path.expanduser(ssh_config))
         else:
             config_file = Path(os.path.expanduser("~/.ssh/vscode/config"))
+        
+        if dry_run:
+            print(f"\n\033[1;95m=== cloudx-proxy List (DRY RUN) ===\033[0m\n")
+            print(f"[DRY RUN] Would read SSH config from: {config_file}")
+            if environment:
+                print(f"[DRY RUN] Would filter hosts by environment: {environment}")
+            if detailed:
+                print(f"[DRY RUN] Would show detailed information including instance IDs")
+            print(f"[DRY RUN] Would parse SSH configuration and display grouped hosts")
+            return
         
         if not config_file.exists():
             print(f"SSH config file not found: {config_file}")
