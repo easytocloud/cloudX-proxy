@@ -1,3 +1,10 @@
+## [0.8.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.1...v0.8.2) (2025-09-09)
+
+
+### Bug Fixes
+
+* make cloudx host matching case-insensitive in list command ([9d91945](https://github.com/easytocloud/cloudX-proxy/commit/9d9194533d0ee2d150ed10da8675ef53911f0a16))
+
 ## [0.8.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.0...v0.8.1) (2025-09-02)
 
 
