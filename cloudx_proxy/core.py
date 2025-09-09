@@ -159,7 +159,7 @@ class CloudXProxy:
         3. Let the session manager plugin handle the actual data transfer
         """
         if self.dry_run:
-            region = 'eu-west-1'  # Default region for dry-run display
+            region = self.region or 'eu-west-1'  # Use initialized region or default
             self.log(f"[DRY RUN] Would start SSM session with SSH port forwarding")
             self.log(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
             return
