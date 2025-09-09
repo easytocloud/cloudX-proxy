@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.4...v0.9.0) (2025-09-09)
+
+
+### Features
+
+* Add --dry-run flag for preview mode across all commands ([72cc2f1](https://github.com/easytocloud/cloudX-proxy/commit/72cc2f1d83f7949cc79595727d6d2a7a5c248a25)), closes [#7](https://github.com/easytocloud/cloudX-proxy/issues/7)
+
 ## [0.8.4](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.3...v0.8.4) (2025-09-09)
 
 ## [0.8.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.2...v0.8.3) (2025-09-09)
