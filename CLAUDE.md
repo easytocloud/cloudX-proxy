@@ -88,11 +88,41 @@ Commit message format affects version bumps:
 
 ### 1Password Integration
 
-When `--1password` is used:
-- Checks for existing SSH keys in any 1Password vault
-- Creates new keys in user-selected vault if needed
-- Configures SSH to use 1Password SSH agent (`IdentityAgent ~/.1password/agent.sock`)
-- Uses public key file to limit SSH agent key search (`IdentitiesOnly yes`)
+The `--1password` flag enables comprehensive SSH key management through 1Password's secure vault system and SSH agent. This integration provides a complete workflow for creating, managing, and using SSH keys without exposing private keys to the filesystem.
+
+#### Prerequisites
+- 1Password CLI installed and available in PATH
+- User authenticated to 1Password (`op account list` succeeds)
+- 1Password SSH agent enabled and running (`~/.1password/agent.sock` exists)
+
+#### Key Discovery and Management Workflow
+1. **Existing Key Search**: Searches all 1Password vaults for SSH keys matching the specified name
+2. **Key Naming Convention**: Uses consistent naming with prefix "cloudX SSH Key - {keyname}"
+3. **Vault Selection**: 
+   - If vault specified via `--1password VaultName`, uses that vault
+   - If specified vault not found, prompts user to select from available vaults
+   - In interactive mode, displays all available vaults for selection
+4. **Key Creation**: Creates new SSH key pair directly in 1Password vault if no existing key found
+5. **Public Key Export**: Exports public key to filesystem at expected SSH config location
+
+#### SSH Configuration Generated
+When using 1Password integration, the SSH configuration includes:
+- `IdentityAgent ~/.1password/agent.sock` - Points to 1Password SSH agent
+- `IdentityFile {keyfile}.pub` - References public key file to limit key search
+- `IdentitiesOnly yes` - Prevents SSH from trying other keys in agent
+
+#### Error Handling and Fallbacks
+- If 1Password CLI unavailable: Prompts user to continue with standard SSH key setup
+- If authentication fails: Provides setup instructions and troubleshooting guidance  
+- If key creation fails: Falls back to standard SSH key generation
+- If SSH agent unavailable: Warns user and provides configuration guidance
+
+#### Security Benefits
+- Private keys never touch the filesystem
+- Centralized key management across devices
+- Audit trail through 1Password logging
+- Automatic key rotation capabilities
+- Integration with 1Password's biometric authentication
 
 ### AWS Environment Support
 
