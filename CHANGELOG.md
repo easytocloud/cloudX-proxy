@@ -1,3 +1,10 @@
+## [0.9.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.0...v0.9.1) (2025-09-11)
+
+
+### Bug Fixes
+
+* migrated to OIDC for PyPI ([8a698ed](https://github.com/easytocloud/cloudX-proxy/commit/8a698edbfe206d410530b5c89ab55d2230b19a92))
+
 # [0.9.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.8.4...v0.9.0) (2025-09-09)
 
 
