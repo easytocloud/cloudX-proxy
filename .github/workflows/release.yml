@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - develop
 
 jobs:
   security-audit:
@@ -44,6 +45,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # 👈 required for OIDC
+      contents: write   # semantic-release needs this
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -63,7 +67,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build twine
+          pip install build
 
       - name: Install semantic-release
         run: |
@@ -95,9 +99,12 @@ jobs:
           SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.semantic.outputs.new_release_version }}
         run: python -m build
 
+      - name: Publish to TestPyPI
+        if: github.ref == 'refs/heads/develop' && steps.semantic.outputs.new_release_version != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
       - name: Publish to PyPI
-        if: steps.semantic.outputs.new_release_version != ''
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: twine upload dist/*
+        if: github.ref == 'refs/heads/main' && steps.semantic.outputs.new_release_version != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
