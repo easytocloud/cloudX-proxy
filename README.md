@@ -559,3 +559,4 @@ uvx cloudx-proxy connect i-1234567890abcdef0 22 --profile your-profile
 ## License
 
 MIT License - see LICENSE file for details
+
