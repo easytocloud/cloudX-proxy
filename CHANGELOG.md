@@ -1,3 +1,10 @@
+## [0.9.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.1...v0.9.2) (2025-09-11)
+
+
+### Bug Fixes
+
+* PyPI auth ([f6ae22c](https://github.com/easytocloud/cloudX-proxy/commit/f6ae22c6e4b16b8097f509600dd65f4cd4f2a51b))
+
 ## [0.9.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.0...v0.9.1) (2025-09-11)
 
 
