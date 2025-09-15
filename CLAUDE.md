@@ -141,7 +141,7 @@ The `--aws-env` parameter enables AWS profile organization:
 ## Code Quality Notes
 
 - Uses modern Python features (pathlib, type hints, f-strings)
-- Supports Python 3.9+ (recently updated from 3.8+)
+- Supports Python 3.9+ (3.9, 3.10, 3.11, 3.12, 3.13)
 - No test suite currently exists
 - Uses Click for CLI with proper help text and option validation
 - Implements comprehensive error handling with user-friendly messages
@@ -155,11 +155,6 @@ The `--aws-env` parameter enables AWS profile organization:
 - Limited type coverage (~60%) and error handling
 - Security vulnerabilities in subprocess handling
 - High technical debt impacting maintainability
-
-### Improvement Documentation
-For comprehensive analysis and improvement plans, see:
-- **[ARCHITECTURE_REVIEW.md](./ARCHITECTURE_REVIEW.md)** - Detailed code quality analysis and security review
-- **[IMPROVEMENT_ROADMAP.md](./IMPROVEMENT_ROADMAP.md)** - 6-phase improvement plan with timeline and priorities
 
 ### Development Standards
 When working on this codebase, prioritize:
