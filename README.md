@@ -57,7 +57,7 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
 1. **Python 3.9+** - Required for cloudX-proxy and uv package manager
    - [Python Installation Guide](https://www.python.org/downloads/)
    - Check your version: `python --version` or `python3 --version`
-   - Supports Python 3.9, 3.10, 3.11, 3.12+
+   - Supports Python 3.9, 3.10, 3.11, 3.12, 3.13
 
 2. **AWS CLI v2** - Used to configure AWS profiles and credentials
    - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
@@ -352,6 +352,7 @@ Options:
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
 - `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
 - `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values.
+- `--dry-run` (flag): Preview setup changes without actually executing them. Useful for testing configurations before applying them.
 
 Example usage:
 ```bash
@@ -386,6 +387,7 @@ Options:
 - `--ssh-config` (optional): Path to the SSH config file to use. If provided during setup, should match here.
 - `--region` (optional): AWS region to use. If not specified, uses the region from the AWS profile.
 - `--aws-env` (optional): AWS environment directory to use. Should match the environment used in setup.
+- `--dry-run` (flag): Preview connection workflow without actually executing it. Shows what would happen without making changes.
 
 Example usage:
 ```bash
@@ -413,6 +415,7 @@ Options:
 - `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/vscode/config.
 - `--environment` (optional): Filter hosts by environment (e.g., dev, prod). If not specified, shows all environments.
 - `--detailed` (flag): Show detailed information including instance IDs.
+- `--dry-run` (flag): Preview list output format without actually reading the SSH configuration.
 
 Example usage:
 ```bash
