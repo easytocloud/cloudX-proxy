@@ -1,3 +1,16 @@
+## [Unreleased]
+
+### Fixed
+- Fixed uv sync compatibility by removing obsolete setuptools-scm-semver dependency
+- Windows SSH client compatibility: Control* directives now commented out by default on Windows
+  - Windows' default SSH client doesn't support ControlMaster/ControlPath/ControlPersist
+  - Users with alternative SSH clients (e.g., Git for Windows) can uncomment if supported
+  - Unix/macOS systems remain unaffected with full multiplexing support
+
+### Changed
+- Updated build system to use setuptools_scm>=6.2 without external semver plugin
+- Version scheme now uses built-in python-simplified-semver
+
 ## [0.9.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.5...v0.9.6) (2025-11-14)
 
 ## [0.9.5](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.4...v0.9.5) (2025-10-27)

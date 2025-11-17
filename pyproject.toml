@@ -44,7 +44,7 @@ cloudx-proxy = "cloudx_proxy.cli:cli"
 
 [tool.setuptools_scm]
 write_to = "cloudx_proxy/_version.py"
-version_scheme = "semver"
+version_scheme = "python-simplified-semver"
 local_scheme = "no-local-version"
 
 [tool.liccheck]

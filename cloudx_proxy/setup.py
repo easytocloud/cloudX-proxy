@@ -526,14 +526,16 @@ Host cloudx-*
 """
         
         # Add SSH multiplexing configuration
+        # On Windows, the default SSH client doesn't support Control* options,
+        # so we comment them out by default. Users with alternative SSH clients
+        # (like the one from Git for Windows) can uncomment these if needed.
         control_path = "~/.ssh/control/%r@%h:%p"
-        if platform.system() == 'Windows':
-            # Use forward slashes for Windows as well, SSH client will handle conversion
-            control_path = "~/.ssh/control/%r@%h:%p"
-            
-        config += f"""    ControlMaster auto
-    ControlPath {control_path}
-    ControlPersist 4h
+        is_windows = platform.system() == 'Windows'
+        comment_prefix = "# " if is_windows else ""
+        
+        config += f"""    {comment_prefix}ControlMaster auto
+    {comment_prefix}ControlPath {control_path}
+    {comment_prefix}ControlPersist 4h
 """
         
         return config

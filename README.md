@@ -204,6 +204,7 @@ The setup command creates a hierarchical three-tier SSH configuration structure:
    - User settings (ec2-user)
    - TCP keepalive for connection stability
    - SSH multiplexing for better performance (ControlMaster, ControlPath, ControlPersist)
+   - **Note for Windows users**: The default Windows SSH client doesn't support Control* directives, so these are automatically commented out. Users with alternative SSH clients (like Git for Windows' bundled SSH) can uncomment these lines if their client supports multiplexing.
 
 2. Environment-specific configuration (cloudx-{env}-*) with:
    - Authentication settings (IdentityFile, IdentityAgent for 1Password)
@@ -562,4 +563,3 @@ uvx cloudx-proxy connect i-1234567890abcdef0 22 --profile your-profile
 ## License
 
 MIT License - see LICENSE file for details
-
