@@ -989,6 +989,18 @@ Host cloudx-{cloudx_env}-{hostname}
             self.print_status(f"[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
             return True
         
+        # On Windows, skip the automated connection test as it may hang
+        # Instead, provide clear instructions for manual testing
+        if platform.system() == 'Windows':
+            self.print_status("Skipping automated connection test on Windows", None, 2)
+            print(f"\n\033[96m{'='*60}\033[0m")
+            print(f"\033[96mSetup completed! To test your SSH connection, run:\033[0m")
+            print(f"\n  \033[1mssh cloudx-{cloudx_env}-{hostname}\033[0m")
+            print(f"\n\033[96m{'='*60}\033[0m\n")
+            self.print_status("Configuration files have been created successfully", True, 2)
+            return True
+        
+        # On non-Windows systems, proceed with automated connection test
         if self.check_instance_setup(instance_id, hostname, cloudx_env):
             return True
             
