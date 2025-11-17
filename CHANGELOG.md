@@ -1,3 +1,11 @@
+## [0.9.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.6...v0.9.7) (2025-11-17)
+
+
+### Bug Fixes
+
+* added .envrc ([b0f577c](https://github.com/easytocloud/cloudX-proxy/commit/b0f577c002b546c3c395520ff3efff61f31ad91d))
+* improve uv sync compatibility and Windows SSH client support ([a4f10cd](https://github.com/easytocloud/cloudX-proxy/commit/a4f10cd1bc2fdb26bf973ed3ccae4e77faa89c3b))
+
 ## [Unreleased]
 
 ### Fixed
