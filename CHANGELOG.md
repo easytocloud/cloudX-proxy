@@ -1,3 +1,10 @@
+## [0.9.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.7...v0.9.8) (2025-11-17)
+
+
+### Bug Fixes
+
+* no connection test on Windows ([e58c51e](https://github.com/easytocloud/cloudX-proxy/commit/e58c51e34a9b1c6811da45e07a3e23684ad26a19))
+
 ## [0.9.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.6...v0.9.7) (2025-11-17)
 
 
