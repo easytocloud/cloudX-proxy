@@ -7,6 +7,43 @@ from . import __version__
 from .core import CloudXProxy
 from .setup import CloudXSetup
 
+
+class OptionalValueOption(click.Option):
+    """Click option that allows an optional value (e.g., --flag or --flag value)."""
+
+    def __init__(self, *args, **kwargs):
+        self.flag_value = kwargs.pop("flag_value", None)
+        if self.flag_value is None:
+            raise ValueError("flag_value is required for OptionalValueOption")
+        if kwargs.get('nargs', 1) != 1:
+            raise ValueError("OptionalValueOption only supports nargs=1")
+        super().__init__(*args, **kwargs)
+
+    def add_to_parser(self, parser, ctx):
+        super().add_to_parser(parser, ctx)
+
+        def _patch(option_name, option_map):
+            if option_name in option_map:
+                original = option_map[option_name]
+
+                def parser(value, state):
+                    if value is None:
+                        state.opts[self.name] = self.flag_value
+                        return
+                    if value.startswith('-') and len(value) > 1:
+                        # Treat as missing value and re-process this token
+                        state.opts[self.name] = self.flag_value
+                        state.rargs.insert(0, value)
+                        return
+                    return original(value, state)
+
+                option_map[option_name] = parser
+
+        for name in self.opts:
+            _patch(name, parser._long_opt)
+        for name in self.secondary_opts:
+            _patch(name, parser._short_opt)
+
 @click.group()
 @click.version_option(version=__version__)
 def cli():
@@ -71,7 +108,16 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
-@click.option('--1password', 'use_1password', default=None, help='Use 1Password SSH agent for SSH authentication. Optionally specify vault name (default: "Private")')
+@click.option(
+    '--1password',
+    'use_1password',
+    cls=OptionalValueOption,
+    flag_value='Private',
+    default=None,
+    type=str,
+    metavar='[VAULT]',
+    help='Use 1Password SSH agent for SSH authentication. Without a value the "Private" vault is used; optionally specify a vault name.'
+)
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')

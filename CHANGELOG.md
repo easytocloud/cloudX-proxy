@@ -32,6 +32,8 @@
 ### Changed
 - Updated build system to use setuptools_scm>=6.2 without external semver plugin
 - Version scheme now uses built-in python-simplified-semver
+- `cloudx-proxy setup --1password` can be used without a vault argument and now
+  defaults to the "Private" vault when no name is supplied
 
 ## [0.9.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.5...v0.9.6) (2025-11-14)
 
