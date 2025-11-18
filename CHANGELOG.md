@@ -1,3 +1,10 @@
+## [0.9.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.11...v0.9.12) (2025-11-18)
+
+
+### Bug Fixes
+
+* handle single .pub file correctly ([1862046](https://github.com/easytocloud/cloudX-proxy/commit/1862046dd14ddc84c2eebf44565fe945cb279b59))
+
 ## [0.9.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.10...v0.9.11) (2025-11-18)
 
 
