@@ -173,18 +173,38 @@ class CloudXSetup:
             # Verify the profile works
             try:
                 identity = session.client('sts').get_caller_identity()
-                user_arn = identity['Arn']
-                
-                # Extract environment from IAM user name
-                user_parts = [part for part in user_arn.split('/') if part.startswith('cloudX-')]
-                if user_parts:
-                    self.default_env = user_parts[0].split('-')[1]  # Extract env from cloudX-{env}-{user}
-                    self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
-                    return True
-                else:
-                    self.print_status(f"AWS profile exists but doesn't match cloudX-{{env}}-{{user}} format", False, 2)
+                identity_arn = identity['Arn']
+
+                # Determine if the identity refers to an IAM user or an assumed role/SSO session
+                resource = identity_arn.split(':', 5)[5]  # arn:partition:service:region:account:resource
+                resource_type, _, resource_details = resource.partition('/')
+
+                if resource_type == 'user' and resource_details:
+                    path_segments = [segment for segment in resource_details.split('/') if segment]
+                    cloudx_segment = next(
+                        (segment for segment in reversed(path_segments) if segment.startswith('cloudX-')),
+                        None,
+                    )
+
+                    if cloudx_segment:
+                        # Extract env from cloudX-{env}-{user}
+                        parts = cloudx_segment.split('-')
+                        if len(parts) >= 3:
+                            self.default_env = parts[1]
+                        self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
+                        return True
+
+                    self.print_status(
+                        "AWS profile exists but doesn't match cloudX-{env}-{user} format", False, 2
+                    )
                     self.print_status("Please ensure your IAM user follows the format: cloudX-{env}-{username}", None, 2)
                     return False
+
+                # Non-user identities (roles, SSO, etc.) should skip the cloudX naming check
+                self.print_status(
+                    "AWS profile uses IAM role/SSO credentials; skipping cloudX user format check", True, 2
+                )
+                return True
             except ClientError:
                 self.print_status("Invalid AWS credentials", False, 2)
                 return False
