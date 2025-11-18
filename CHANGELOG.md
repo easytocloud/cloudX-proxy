@@ -1,3 +1,10 @@
+## [0.9.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.8...v0.9.9) (2025-11-18)
+
+
+### Bug Fixes
+
+* SSO role name check dropped ([63779eb](https://github.com/easytocloud/cloudX-proxy/commit/63779eb42c6a7c2c514ad1307829bcfd5c40f23c))
+
 ## [0.9.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.7...v0.9.8) (2025-11-17)
 
 
