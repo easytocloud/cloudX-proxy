@@ -426,16 +426,27 @@ class CloudXSetup:
             if not self._set_directory_permissions(self.ssh_dir):
                 return False
             
-            key_exists = self.ssh_key_file.exists() and (self.ssh_key_file.with_suffix('.pub')).exists()
+            pub_key_file = self.ssh_key_file.with_suffix('.pub')
+            private_key_exists = self.ssh_key_file.exists()
+            pub_key_exists = pub_key_file.exists()
+            
+            # Check if only public key exists (private key likely in 1Password)
+            if pub_key_exists and not private_key_exists:
+                self.print_status(f"Public key '{self.ssh_key}.pub' found (private key in 1Password or secure storage)", True, 2)
+                self.print_status("Using existing key configuration", True, 2)
+                return True
+            
+            key_exists = private_key_exists and pub_key_exists
             
             if key_exists:
-                self.print_status(f"SSH key '{self.ssh_key}' exists", True, 2)
+                self.print_status(f"SSH key pair '{self.ssh_key}' already exists", True, 2)
                 # Set proper permissions on existing key files
                 if platform.system() != 'Windows':
                     import stat
                     self.ssh_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
-                    self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
-                    self.print_status("Set key file permissions", True, 2)
+                    pub_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
+                    self.print_status("Updated key file permissions", True, 2)
+                self.print_status("Using existing SSH key", True, 2)
             else:
                 self.print_status(f"Generating new SSH key '{self.ssh_key}'...", None, 2)
                 subprocess.run([
@@ -444,17 +455,15 @@ class CloudXSetup:
                     '-f', str(self.ssh_key_file),
                     '-N', ''  # Empty passphrase
                 ], check=True)
-                self.print_status("SSH key generated", True, 2)
+                self.print_status("SSH key generated successfully", True, 2)
                 
                 # Set proper permissions on newly generated key files
                 if platform.system() != 'Windows':
                     import stat
                     self.ssh_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
-                    self.ssh_key_file.with_suffix('.pub').chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
+                    pub_key_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)  # 644 permissions
                     self.print_status("Set key file permissions", True, 2)
             
-            # Standard key generation successful
-            self.print_status("Key generated successfully", True, 2)
             return True
 
         except Exception as e:
