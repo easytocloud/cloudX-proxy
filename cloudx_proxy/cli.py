@@ -23,21 +23,35 @@ class OptionalValueOption(click.Option):
         super().add_to_parser(parser, ctx)
 
         def _patch(option_name, option_map):
-            if option_name in option_map:
-                original = option_map[option_name]
+            parser_option = option_map.get(option_name)
+            if parser_option is None:
+                return
 
-                def parser(value, state):
-                    if value is None:
+            if getattr(parser_option, "_optional_value_configured", False):
+                return
+
+            original_process = parser_option.process
+
+            def process(value, state):
+                # If Click has not consumed a value yet, peek the next token
+                if value is None:
+                    next_value = state.rargs[0] if state.rargs else None
+                    if next_value is None or next_value.startswith('-'):
                         state.opts[self.name] = self.flag_value
                         return
-                    if value.startswith('-') and len(value) > 1:
-                        # Treat as missing value and re-process this token
-                        state.opts[self.name] = self.flag_value
-                        state.rargs.insert(0, value)
-                        return
-                    return original(value, state)
+                    value = state.rargs.pop(0)
 
-                option_map[option_name] = parser
+                # If the consumed value looks like the start of another option,
+                # treat it as missing and push it back onto the args list.
+                if isinstance(value, str) and value.startswith('-') and len(value) > 1:
+                    state.opts[self.name] = self.flag_value
+                    state.rargs.insert(0, value)
+                    return
+
+                return original_process(value, state)
+
+            parser_option.process = process
+            parser_option._optional_value_configured = True
 
         for name in self.opts:
             _patch(name, parser._long_opt)
