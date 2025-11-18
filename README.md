@@ -1,19 +1,19 @@
-# cloudX-proxy
+# cloudx-proxy
 
 [![PyPI Version](https://img.shields.io/pypi/v/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
 [![Python Support](https://img.shields.io/pypi/pyversions/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
-[![License](https://img.shields.io/github/license/easytocloud/cloudX-proxy.svg)](https://github.com/easytocloud/cloudX-proxy/blob/main/LICENSE)
-[![Release](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
-[![Security Audit](https://img.shields.io/badge/security-pip--audit-blue?logo=python)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
-[![License Check](https://img.shields.io/badge/license-MIT%20compatible-green?logo=legal)](https://github.com/easytocloud/cloudX-proxy/actions/workflows/release.yml)
-[![Dependabot](https://img.shields.io/badge/dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/easytocloud/cloudX-proxy/network/updates)
+[![License](https://img.shields.io/github/license/easytocloud/cloudx-proxy.svg)](https://github.com/easytocloud/cloudx-proxy/blob/main/LICENSE)
+[![Release](https://github.com/easytocloud/cloudx-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/easytocloud/cloudx-proxy/actions/workflows/release.yml)
+[![Security Audit](https://img.shields.io/badge/security-pip--audit-blue?logo=python)](https://github.com/easytocloud/cloudx-proxy/actions/workflows/release.yml)
+[![License Check](https://img.shields.io/badge/license-MIT%20compatible-green?logo=legal)](https://github.com/easytocloud/cloudx-proxy/actions/workflows/release.yml)
+[![Dependabot](https://img.shields.io/badge/dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/easytocloud/cloudx-proxy/network/updates)
 [![Downloads](https://img.shields.io/pypi/dm/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
 
 A cross-platform SSH proxy command for connecting VSCode to CloudX/Cloud9 EC2 instances using AWS Systems Manager Session Manager.
 
 ## Overview
 
-cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
+cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
 
 - Automatic instance startup if stopped
 - SSH key distribution via EC2 Instance Connect
@@ -54,7 +54,7 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
 
 ## Prerequisites
 
-1. **Python 3.9+** - Required for cloudX-proxy and uv package manager
+1. **Python 3.9+** - Required for cloudx-proxy and uv package manager
    - [Python Installation Guide](https://www.python.org/downloads/)
    - Check your version: `python --version` or `python3 --version`
    - Supports Python 3.9, 3.10, 3.11, 3.12, 3.13
@@ -84,7 +84,7 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
    - Downloads and installs the package and its dependencies
    - Runs the package without explicit environment activation
    
-   This means you can run cloudX-proxy directly with `uvx cloudx-proxy` without manually managing virtual environments or dependencies.
+   This means you can run cloudx-proxy directly with `uvx cloudx-proxy` without manually managing virtual environments or dependencies.
 
 6. **VSCode with Remote SSH Extension** - Your development environment
    - Provides the integrated development environment
@@ -93,11 +93,11 @@ cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using
 
 ## Installation
 
-The cloudX-proxy package is available on PyPI and can run using uvx without explicit installation.
+The cloudx-proxy package is available on PyPI and can run using uvx without explicit installation.
 
 ## Setup
 
-cloudX-proxy includes a setup command that automates the entire configuration process:
+cloudx-proxy includes a setup command that automates the entire configuration process:
 
 ```bash
 # Basic setup with defaults (vscode profile and key)
@@ -131,6 +131,8 @@ The setup command will:
 
 2. Manage SSH Keys:
    - Creates new SSH key pair if needed
+     * Defaults to key name "vscode" in ~/.ssh/vscode/
+     * Custom key name/location via --ssh-key and --ssh-config
    - Fully supports 1Password integration:
      * Using 1Password SSH agent via `--1password` flag
      * Creates keys directly in 1Password's secure vault
@@ -151,7 +153,7 @@ The setup command will:
 
 ### SSH Configuration
 
-The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
+The setup command configures SSH to use cloudx-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
 
 ```bash
 uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
@@ -226,7 +228,7 @@ This three-tier structure offers better maintainability by reducing duplication 
 
 ### Security Model: AWS and SSH Integration
 
-cloudX-proxy implements a unique dual-layer security approach that combines AWS's robust authentication mechanisms with SSH's connection handling capabilities:
+cloudx-proxy implements a unique dual-layer security approach that combines AWS's robust authentication mechanisms with SSH's connection handling capabilities:
 
 #### AWS Security Layer (Primary)
 The primary security boundary is enforced through AWS Systems Manager (SSM) and EC2 Instance Connect. This layer provides:
@@ -250,7 +252,7 @@ This architecture means that:
 
 ### VSCode Configuration
 
-After completing the setup, configure VSCode to use the SSH configuration created by cloudX-proxy:
+After completing the setup, configure VSCode to use the SSH configuration created by cloudx-proxy:
 
 1. **Install VSCode Extensions:**
    - Install the "Remote - SSH" extension from the VSCode marketplace
@@ -271,7 +273,7 @@ After completing the setup, configure VSCode to use the SSH configuration create
    ```
 
 3. **Configuration Explanations:**
-   - `configFile`: Points to the SSH config created by cloudX-proxy setup
+   - `configFile`: Points to the SSH config created by cloudx-proxy setup
    - `connectTimeout`: Extended timeout (90s) for instance startup and connection establishment
    - `serverInstallTimeout`: Additional time (120s) for VSCode server installation on first connect
    - `showLoginTerminal`: Shows connection progress for troubleshooting
@@ -293,15 +295,15 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 
 1. **VSCode Initiates SSH Connection**
    - User clicks "Connect" or runs `ssh cloudx-{env}-{hostname}`
-   - SSH reads the configuration and calls cloudX-proxy as ProxyCommand
+   - SSH reads the configuration and calls cloudx-proxy as ProxyCommand
 
 2. **AWS Authentication & Instance Check**
-   - cloudX-proxy authenticates using the specified AWS profile
+   - cloudx-proxy authenticates using the specified AWS profile
    - Checks if the target EC2 instance exists and is accessible
    - Verifies SSM agent is installed and running on the instance
 
 3. **Instance Startup (if needed)**
-   - If instance is stopped, cloudX-proxy starts it automatically
+   - If instance is stopped, cloudx-proxy starts it automatically
    - Waits for instance to reach "running" state (typically 30-60 seconds)
    - Monitors SSM connectivity until agent responds
 
@@ -345,10 +347,10 @@ uvx cloudx-proxy setup [OPTIONS]
 ```
 
 Options:
-- `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.
+- `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.  When the profile is an SSO profile (role), ensure you have logged in using `aws sso login --profile {profile}` before running the setup and when connecting.
 - `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in the SSH config directory. This same name can be used in the connect command.
 - `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/vscode/config.
-- `--1password` (optional): Enable 1Password SSH agent integration. Can be used as a flag or with a vault name (e.g., `--1password Private`). First searches all vaults for existing keys with name "cloudX SSH Key - {keyname}". If no existing key found, creates new keys directly in the specified (or selected) 1Password vault and configures SSH to use the 1Password SSH agent. If a vault name is specified, that vault will be used for key storage; otherwise, prompts user to select from available vaults. By default, the "Private" vault is used when no vault specified. Note that only the "Private" vault is enabled for SSH by default in 1Password settings - other vaults must be manually enabled in 1Password SSH agent settings.
+- `--1password` (optional): Enable 1Password SSH agent integration. Can be used as a flag or with a vault name (e.g., `--1password Private`). First searches all vaults for existing keys with name "cloudX SSH Key - {keyname}". If no existing key found, creates new keys directly in the specified (or selected) 1Password vault and configures SSH to use the 1Password SSH agent. If a vault name is specified, that vault will be used for key storage. By default, the "Private" vault is used when no vault specified. Note that only the "Private" vault is enabled for SSH by default in 1Password settings - other vaults must be manually enabled in 1Password SSH agent settings.
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
 - `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
@@ -370,7 +372,7 @@ uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config --1password
 uvx cloudx-proxy setup --1password Work
 
 # Complete setup with all options
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
+uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod --instance i-0123456789abcdef0 --hostname myserver --yes
 ```
 
 #### Connect Command
@@ -441,7 +443,7 @@ The list command displays all configured cloudx-proxy hosts, grouped by environm
 2. Select "SSH Targets" from the dropdown
 3. Your configured hosts will appear (e.g., cloudx-dev)
 4. Click the "+" icon next to a host to connect
-5. VSCode will handle the rest, using cloudX-proxy to establish the connection
+5. VSCode will handle the rest, using cloudx-proxy to establish the connection
 
 ## AWS Permissions
 ### IAM User Permissions
@@ -456,6 +458,44 @@ Example:
 Note: This user should be created using the cloudX-user product from Service Catalog in the AWS Console. This assures proper permissions and naming conventions. The user in the example is member of the `dev` group, part as part of the `cloudx-dev` environment.
 
 The EC2 instance should have the tag `cloudxuser` with the value of the username of the user that is connecting to the instance. This is automatically set when the instance is created using the cloudX-instance product from Service Catalog in the AWS Console.
+
+
+### IAM Role Permissions
+
+In organizations with AWS IAM Identity Center (formerly AWS SSO), the IAM entity is often a role that is assumed by the user. The role must have the same permissions as described for the IAM user above, typically in the form of a permission set. ABAC aside, the following permissions are required for the role:
+
+```
+    InlinePolicy: 
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GetStatusWithSSM1
+            Effect: Allow
+            Action: ssm:DescribeInstanceInformation
+            Resource: !Sub 'arn:aws:ec2:*:*:instance/*'
+          - Sid: GetStatusWithSSM2
+            Effect: Allow
+            Action: ssm:DescribeInstanceInformation
+            Resource: !Sub 'arn:aws:ssm:*:*:*'
+          - Sid: StartEc2
+            Effect: Allow
+            Action: ec2:StartInstances
+            Resource: !Sub 'arn:aws:ec2:*:*:instance/*'
+          - Sid: StartSession1
+            Effect: Allow
+            Action: ssm:StartSession
+            Resource: !Sub 'arn:aws:ec2:*:*:instance/*'
+          - Sid: StartSession2
+            Effect: Allow
+            Action: ssm:StartSession
+            Resource: !Sub 'arn:aws:ssm:*:*:document/AWS-StartSSHSession'
+          - Sid: AllowSendPubKey
+            Effect: Allow
+            Action:
+              - ec2-instance-connect:SendSSHPublicKey
+            Resource: !Sub 'arn:aws:ec2:*:*:instance/*'
+    
+```
+
 
 ### EC2 Instance Permissions
 
