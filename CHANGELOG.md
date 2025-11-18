@@ -1,3 +1,10 @@
+## [0.9.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.9...v0.9.10) (2025-11-18)
+
+
+### Bug Fixes
+
+* [1password] default to Private vault ([a394759](https://github.com/easytocloud/cloudX-proxy/commit/a39475909582de2c4b0be1b519a45e58e00607f8))
+
 ## [0.9.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.8...v0.9.9) (2025-11-18)
 
 
