@@ -1,3 +1,10 @@
+## [0.9.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.10...v0.9.11) (2025-11-18)
+
+
+### Bug Fixes
+
+* empty vault name error ([bf16c6e](https://github.com/easytocloud/cloudX-proxy/commit/bf16c6e03ad1b6216ec17f1fd32ad9ab2c436eff))
+
 ## [0.9.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.9...v0.9.10) (2025-11-18)
 
 
