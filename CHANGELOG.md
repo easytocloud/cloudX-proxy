@@ -55,8 +55,13 @@
 ### Changed
 - Updated build system to use setuptools_scm>=6.2 without external semver plugin
 - Version scheme now uses built-in python-simplified-semver
-- `cloudx-proxy setup --1password` can be used without a vault argument and now
-  defaults to the "Private" vault when no name is supplied
+- `cloudx-proxy setup --1password` now works without a value (defaults to "Private" vault)
+- `cloudx-proxy setup --1password VAULT` accepts optional vault name
+- 1Password SSH agent socket now uses literal `~/.1password/agent.sock` in SSH config
+- Automatic symlink creation on macOS from `~/.1password/agent.sock` to default 1Password location
+
+### Fixed
+- Fixed `--1password` option where Click was overwriting the `flag_value` attribute
 
 ## [0.9.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.5...v0.9.6) (2025-11-14)
 

@@ -12,51 +12,25 @@ class OptionalValueOption(click.Option):
     """Click option that allows an optional value (e.g., --flag or --flag value)."""
 
     def __init__(self, *args, **kwargs):
-        self.flag_value = kwargs.pop("flag_value", None)
-        if self.flag_value is None:
+        _flag_value = kwargs.pop("flag_value", None)
+        if _flag_value is None:
             raise ValueError("flag_value is required for OptionalValueOption")
         if kwargs.get('nargs', 1) != 1:
             raise ValueError("OptionalValueOption only supports nargs=1")
+
+        # Force Click to treat this as a regular option (so it can take a value)
+        kwargs.setdefault('is_flag', False)
+        kwargs['flag_value'] = _flag_value
+
         super().__init__(*args, **kwargs)
 
-    def add_to_parser(self, parser, ctx):
-        super().add_to_parser(parser, ctx)
+        # Ensure Click knows this flag may omit its value and fall back to flag_value
+        self._flag_needs_value = True
+        self.flag_value = _flag_value
+        self._flag_default = _flag_value
 
-        def _patch(option_name, option_map):
-            parser_option = option_map.get(option_name)
-            if parser_option is None:
-                return
 
-            if getattr(parser_option, "_optional_value_configured", False):
-                return
 
-            original_process = parser_option.process
-
-            def process(value, state):
-                # If Click has not consumed a value yet, peek the next token
-                if value is None:
-                    next_value = state.rargs[0] if state.rargs else None
-                    if next_value is None or next_value.startswith('-'):
-                        state.opts[self.name] = self.flag_value
-                        return
-                    value = state.rargs.pop(0)
-
-                # If the consumed value looks like the start of another option,
-                # treat it as missing and push it back onto the args list.
-                if isinstance(value, str) and value.startswith('-') and len(value) > 1:
-                    state.opts[self.name] = self.flag_value
-                    state.rargs.insert(0, value)
-                    return
-
-                return original_process(value, state)
-
-            parser_option.process = process
-            parser_option._optional_value_configured = True
-
-        for name in self.opts:
-            _patch(name, parser._long_opt)
-        for name in self.secondary_opts:
-            _patch(name, parser._short_opt)
 
 @click.group()
 @click.version_option(version=__version__)
@@ -128,7 +102,6 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     cls=OptionalValueOption,
     flag_value='Private',
     default=None,
-    type=str,
     metavar='[VAULT]',
     help='Use 1Password SSH agent for SSH authentication. Without a value the "Private" vault is used; optionally specify a vault name.'
 )
@@ -136,7 +109,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--hostname', help='Hostname to use for SSH configuration')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
-def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str, 
+def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str,
           instance: str, hostname: str, non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
