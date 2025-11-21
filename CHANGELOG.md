@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.14...v0.10.0) (2025-11-21)
+
+
+### Features
+
+* add cloudX-proxy command and restructure documentation ([90b20ec](https://github.com/easytocloud/cloudX-proxy/commit/90b20ec9854fd29b6efc8fc293e05f308c758e0d))
+
 ## [0.9.14](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.13...v0.9.14) (2025-11-18)
 
 
