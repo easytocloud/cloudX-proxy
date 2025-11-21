@@ -1,7 +1,7 @@
 [project]
 name = "cloudx-proxy"
 dynamic = ["version"]
-description = "SSH proxy command to connect VSCode with Cloud9/CloudX instance using AWS Systems Manager"
+description = "SSH proxy command to connect VSCode with cloudX instance using AWS Systems Manager"
 authors = [
     {name = "easytocloud", email = "info@easytocloud.com"}
 ]

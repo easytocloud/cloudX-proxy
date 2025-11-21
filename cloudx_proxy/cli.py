@@ -37,7 +37,7 @@ class OptionalValueOption(click.Option):
 def cli():
     """cloudx-proxy - SSH proxy to connect VSCode Remote SSH to EC2 instances using SSM.
 
-This tool enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager,
+This tool enables seamless SSH connections from VSCode to EC2 instances (see https://github.com/easytocloud/cloudX) using AWS Systems Manager,
 eliminating the need for direct SSH access or public IP addresses.
 
 \b

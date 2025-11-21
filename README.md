@@ -9,11 +9,13 @@
 [![Dependabot](https://img.shields.io/badge/dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/easytocloud/cloudx-proxy/network/updates)
 [![Downloads](https://img.shields.io/pypi/dm/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
 
-A cross-platform SSH proxy command for connecting VSCode to CloudX/Cloud9 EC2 instances using AWS Systems Manager Session Manager.
+A cross-platform SSH proxy command for connecting VSCode to CloudX EC2 instances (see [cloudX](https://github.com/easytocloud/cloudX)) using AWS Systems Manager Session Manager.
 
 ## Overview
 
-cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
+cloudX-proxy is the client-side component of the cloudX development environment. It enables seamless SSH connections from VSCode to EC2 instances created with the [cloudX CloudFormation templates](https://github.com/easytocloud/cloudX).
+
+Using AWS Systems Manager Session Manager, it eliminates the need for direct SSH access or public IP addresses. It handles:
 
 - Automatic instance startup if stopped
 - SSH key distribution via EC2 Instance Connect
@@ -457,9 +459,9 @@ The ABAC tag defaults to `cloudxuser` and should have the value of the username 
 Example:
 - AWS IAM User `cloudx-dev-user1` is connecting to an instance with the tag `cloudxuser=cloudx-dev-user1`
 
-Note: This user should be created using the cloudX-user product from Service Catalog in the AWS Console. This assures proper permissions and naming conventions. The user in the example is member of the `dev` group, part as part of the `cloudx-dev` environment.
+Note: This user should be created using the `cloudX-user` template from the [cloudX repository](https://github.com/easytocloud/cloudX). This assures proper permissions and naming conventions. The user in the example is member of the `dev` group, part as part of the `cloudx-dev` environment.
 
-The EC2 instance should have the tag `cloudxuser` with the value of the username of the user that is connecting to the instance. This is automatically set when the instance is created using the cloudX-instance product from Service Catalog in the AWS Console.
+The EC2 instance should have the tag `cloudxuser` with the value of the username of the user that is connecting to the instance. This is automatically set when the instance is created using the `cloudX-instance` template from the [cloudX repository](https://github.com/easytocloud/cloudX).
 
 
 ### IAM Role Permissions
