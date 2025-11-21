@@ -1,4 +1,4 @@
-# cloudx-proxy
+# cloudX-proxy
 
 [![PyPI Version](https://img.shields.io/pypi/v/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
 [![Python Support](https://img.shields.io/pypi/pyversions/cloudx-proxy.svg)](https://pypi.org/project/cloudx-proxy/)
@@ -13,7 +13,7 @@ A cross-platform SSH proxy command for connecting VSCode to CloudX/Cloud9 EC2 in
 
 ## Overview
 
-cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
+cloudX-proxy enables seamless SSH connections from VSCode to EC2 instances using AWS Systems Manager Session Manager, eliminating the need for direct SSH access or public IP addresses. It handles:
 
 - Automatic instance startup if stopped
 - SSH key distribution via EC2 Instance Connect
@@ -33,10 +33,10 @@ cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using
 2. **Run Setup:**
    ```bash
    # Basic setup (will prompt for AWS profile, instance ID, etc.)
-   uvx cloudx-proxy setup
+   uvx cloudX-proxy setup
    
    # Or non-interactive with all parameters
-   uvx cloudx-proxy setup --profile myprofile --instance i-1234567890abcdef0 --hostname myserver --yes
+   uvx cloudX-proxy setup --profile myprofile --instance i-1234567890abcdef0 --hostname myserver --yes
    ```
 
 3. **Configure VSCode:**
@@ -46,7 +46,7 @@ cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using
 
 4. **Connect:**
    - Open VSCode Remote Explorer → SSH Targets
-   - Connect to `cloudx-{env}-{hostname}` (e.g., `cloudx-dev-myserver`)
+   - Connect to `cloudX-{env}-{hostname}` (e.g., `cloudX-dev-myserver`)
 
 **First connection takes 2-3 minutes (instance startup + VSCode server install). Subsequent connections are much faster (~30s).**
 
@@ -84,7 +84,7 @@ cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using
    - Downloads and installs the package and its dependencies
    - Runs the package without explicit environment activation
    
-   This means you can run cloudx-proxy directly with `uvx cloudx-proxy` without manually managing virtual environments or dependencies.
+   This means you can run cloudX-proxy directly with `uvx cloudX-proxy` without manually managing virtual environments or dependencies.
 
 6. **VSCode with Remote SSH Extension** - Your development environment
    - Provides the integrated development environment
@@ -93,33 +93,33 @@ cloudx-proxy enables seamless SSH connections from VSCode to EC2 instances using
 
 ## Installation
 
-The cloudx-proxy package is available on PyPI and can run using uvx without explicit installation.
+The cloudX-proxy package is available on PyPI and can run using uvx without explicit installation.
 
 ## Setup
 
-cloudx-proxy includes a setup command that automates the entire configuration process:
+cloudX-proxy includes a setup command that automates the entire configuration process:
 
 ```bash
 # Basic setup with defaults (vscode profile and key)
-uvx cloudx-proxy setup
+uvx cloudX-proxy setup
 
 # Setup with custom profile and key
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey
 
 # Setup with AWS environment
-uvx cloudx-proxy setup --aws-env prod
+uvx cloudX-proxy setup --aws-env prod
 
 # Setup with custom SSH config location
-uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config
+uvx cloudX-proxy setup --ssh-config ~/.ssh/cloudx/config
 
 # Setup with 1Password integration
-uvx cloudx-proxy setup --1password
+uvx cloudX-proxy setup --1password
 
 # Setup with non-interactive automation
-uvx cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+uvx cloudX-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
 
 # Combine options
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod
 ```
 
 The setup command will:
@@ -153,19 +153,19 @@ The setup command will:
 
 ### SSH Configuration
 
-The setup command configures SSH to use cloudx-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
+The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
 
 ```bash
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey
 ```
 
 Will create a three-tier configuration structure like this:
 
 ```
 # Generic configuration (shared by all environments)
-# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: generic
-Host cloudx-*
+Host cloudX-*
     User ec2-user
     TCPKeepAlive yes
     ControlMaster auto
@@ -173,52 +173,52 @@ Host cloudx-*
     ControlPersist 4h
 
 # Environment configuration (specific to a single environment)
-# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: environment
-Host cloudx-dev-*
+Host cloudX-dev-*
     IdentityFile ~/.ssh/vscode/mykey
     IdentitiesOnly yes
-    ProxyCommand uvx cloudx-proxy connect %h %p --profile myprofile --ssh-key mykey
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile myprofile --ssh-key mykey
 
 # Host configuration (specific to a single instance)
-# Created by cloudx-proxy v1.0.0 on 2025-03-07 09:05:23
+# Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: host
-Host cloudx-dev-myserver
+Host cloudX-dev-myserver
     HostName i-0123456789abcdef0
 ```
 
 Allowing the user to:
 
 ```bash
-ssh cloudx-dev-myserver
-scp cloudx-dev-myserver:/path/to/file /local/path/to/file
+ssh cloudX-dev-myserver
+scp cloudX-dev-myserver:/path/to/file /local/path/to/file
 ```
+
 without the need to provide any further credentials.
 
-In these examples, ssh will use cloudx-proxy to connect to AWS with the `myprofile` credentials, allowing it to check the instance state and start the instance if it's stopped. Next cloudx-proxy will use `myprofile` to push the public part of the key `mykey` to the instance using SSM. Finally a tunnel is created between the local machine and the instance, using the SSM plugin, allowing SSH to connect to the instance using the private part of the `mykey` key. 
+In these examples, ssh will use cloudX-proxy to connect to AWS with the `myprofile` credentials, allowing it to check the instance state and start the instance if it's stopped. Next cloudX-proxy will use `myprofile` to push the public part of the key `mykey` to the instance using SSM. Finally a tunnel is created between the local machine and the instance, using the SSM plugin, allowing SSH to connect to the instance using the private part of the `mykey` key.
 
 VSCode will be able to connect to the instance using the same SSH configuration.
 
 ### SSH Configuration Details
 The setup command creates a hierarchical three-tier SSH configuration structure:
 
-1. Generic configuration (cloudx-*) containing common settings shared across all environments:
+1. Generic configuration (cloudX-*) containing common settings shared across all environments:
    - User settings (ec2-user)
    - TCP keepalive for connection stability
    - SSH multiplexing for better performance (ControlMaster, ControlPath, ControlPersist)
    - **Note for Windows users**: The default Windows SSH client doesn't support Control* directives, so these are automatically commented out. Users with alternative SSH clients (like Git for Windows' bundled SSH) can uncomment these lines if their client supports multiplexing.
 
-2. Environment-specific configuration (cloudx-{env}-*) with:
+2. Environment-specific configuration (cloudX-{env}-*) with:
    - Authentication settings (IdentityFile, IdentityAgent for 1Password)
    - ProxyCommand with environment-specific parameters
    - Inherits all settings from the generic configuration
 
-3. Host-specific entries (cloudx-{env}-hostname) with:
+3. Host-specific entries (cloudX-{env}-hostname) with:
    - Instance ID (HostName directive)
    - Inherits all settings from both generic and environment configurations
 
 Each configuration tier is clearly marked with a timestamp and version information comment, making it easy to track when and how configurations were created.
-
 When adding new instances to an existing environment, you can choose to:
 - Keep the existing environment configuration if it's compatible
 - Override the environment configuration with new settings
@@ -252,7 +252,7 @@ This architecture means that:
 
 ### VSCode Configuration
 
-After completing the setup, configure VSCode to use the SSH configuration created by cloudx-proxy:
+After completing the setup, configure VSCode to use the SSH configuration created by cloudX-proxy:
 
 1. **Install VSCode Extensions:**
    - Install the "Remote - SSH" extension from the VSCode marketplace
@@ -267,17 +267,17 @@ After completing the setup, configure VSCode to use the SSH configuration create
        "remote.SSH.serverInstallTimeout": 120,
        "remote.SSH.showLoginTerminal": true,
        "remote.SSH.remotePlatform": {
-           "cloudx-*": "linux"
+           "cloudX-*": "linux"
        }
    }
    ```
 
 3. **Configuration Explanations:**
-   - `configFile`: Points to the SSH config created by cloudx-proxy setup
+   - `configFile`: Points to the SSH config created by cloudX-proxy setup
    - `connectTimeout`: Extended timeout (90s) for instance startup and connection establishment
    - `serverInstallTimeout`: Additional time (120s) for VSCode server installation on first connect
    - `showLoginTerminal`: Shows connection progress for troubleshooting
-   - `remotePlatform`: Tells VSCode that cloudx hosts are Linux systems
+   - `remotePlatform`: Tells VSCode that cloudX hosts are Linux systems
 
 4. **Custom SSH Config Location:**
    If you used `--ssh-config` during setup, update the `configFile` path accordingly:
@@ -294,16 +294,16 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 #### Step-by-Step Connection Process
 
 1. **VSCode Initiates SSH Connection**
-   - User clicks "Connect" or runs `ssh cloudx-{env}-{hostname}`
-   - SSH reads the configuration and calls cloudx-proxy as ProxyCommand
+   - User clicks "Connect" or runs `ssh cloudX-{env}-{hostname}`
+   - SSH reads the configuration and calls cloudX-proxy as ProxyCommand
 
 2. **AWS Authentication & Instance Check**
-   - cloudx-proxy authenticates using the specified AWS profile
+   - cloudX-proxy authenticates using the specified AWS profile
    - Checks if the target EC2 instance exists and is accessible
    - Verifies SSM agent is installed and running on the instance
 
 3. **Instance Startup (if needed)**
-   - If instance is stopped, cloudx-proxy starts it automatically
+   - If instance is stopped, cloudX-proxy starts it automatically
    - Waits for instance to reach "running" state (typically 30-60 seconds)
    - Monitors SSM connectivity until agent responds
 
@@ -341,9 +341,11 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 
 ### Command Line Options
 
+> **Note:** For backward compatibility, the command `cloudx-proxy` is also available and functions identically to `cloudX-proxy`, but defaults to lowercase `cloudx` prefixes in generated configurations.
+
 #### Setup Command
 ```bash
-uvx cloudx-proxy setup [OPTIONS]
+uvx cloudX-proxy setup [OPTIONS]
 ```
 
 Options:
@@ -360,24 +362,24 @@ Options:
 Example usage:
 ```bash
 # Basic setup with defaults
-uvx cloudx-proxy setup
+uvx cloudX-proxy setup
 
 # Setup with custom profile and key
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey
 
 # Setup with custom SSH config and 1Password integration (uses default "Private" vault)
-uvx cloudx-proxy setup --ssh-config ~/.ssh/cloudx/config --1password
+uvx cloudX-proxy setup --ssh-config ~/.ssh/cloudx/config --1password
 
 # Setup with 1Password integration using a specific vault
-uvx cloudx-proxy setup --1password Work
+uvx cloudX-proxy setup --1password Work
 
 # Complete setup with all options
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod --instance i-0123456789abcdef0 --hostname myserver --yes
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey --ssh-config ~/.ssh/cloudx/config --1password --aws-env prod --instance i-0123456789abcdef0 --hostname myserver --yes
 ```
 
 #### Connect Command
 ```bash
-uvx cloudx-proxy connect INSTANCE_ID [PORT] [OPTIONS]
+uvx cloudX-proxy connect INSTANCE_ID [PORT] [OPTIONS]
 ```
 
 Arguments:
@@ -395,23 +397,23 @@ Options:
 Example usage:
 ```bash
 # Connect using defaults
-uvx cloudx-proxy connect i-0123456789abcdef0
+uvx cloudX-proxy connect i-0123456789abcdef0
 
 # Connect with custom profile and key
-uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --ssh-key mykey
+uvx cloudX-proxy connect i-0123456789abcdef0 22 --profile myprofile --ssh-key mykey
 
 # Connect with custom port and region
-uvx cloudx-proxy connect i-0123456789abcdef0 2222 --region us-east-1
+uvx cloudX-proxy connect i-0123456789abcdef0 2222 --region us-east-1
 
 # Connect with AWS environment
-uvx cloudx-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env prod
+uvx cloudX-proxy connect i-0123456789abcdef0 22 --profile myprofile --aws-env prod
 ```
 
 Note: The connect command is typically used through the SSH ProxyCommand configuration set up by the setup command. You rarely need to run it directly unless testing the connection.
 
 #### List Command
 ```bash
-uvx cloudx-proxy list [OPTIONS]
+uvx cloudX-proxy list [OPTIONS]
 ```
 
 Options:
@@ -423,27 +425,27 @@ Options:
 Example usage:
 ```bash
 # List all configured hosts
-uvx cloudx-proxy list
+uvx cloudX-proxy list
 
 # List hosts in a specific environment
-uvx cloudx-proxy list --environment dev
+uvx cloudX-proxy list --environment dev
 
 # List hosts with detailed information
-uvx cloudx-proxy list --detailed
+uvx cloudX-proxy list --detailed
 
 # List hosts from a custom SSH config
-uvx cloudx-proxy list --ssh-config ~/.ssh/cloudx/config
+uvx cloudX-proxy list --ssh-config ~/.ssh/cloudx/config
 ```
 
-The list command displays all configured cloudx-proxy hosts, grouped by environment. It provides a quick overview of available connections and can help troubleshoot SSH configuration issues.
+The list command displays all configured cloudX-proxy hosts, grouped by environment. It provides a quick overview of available connections and can help troubleshoot SSH configuration issues.
 
 ### VSCode
 
 1. Click the "Remote Explorer" icon in the VSCode sidebar
 2. Select "SSH Targets" from the dropdown
-3. Your configured hosts will appear (e.g., cloudx-dev)
+3. Your configured hosts will appear (e.g., cloudX-dev)
 4. Click the "+" icon next to a host to connect
-5. VSCode will handle the rest, using cloudx-proxy to establish the connection
+5. VSCode will handle the rest, using cloudX-proxy to establish the connection
 
 ## AWS Permissions
 ### IAM User Permissions
@@ -525,7 +527,7 @@ These permissions are required to bootstrap the instance, so that after creation
 
 2. **VSCode Connection Issues**
    - **Error: "Could not establish connection"** - Check VSCode SSH config file path in settings
-   - **Error: "Host not found"** - Run `uvx cloudx-proxy list` to verify host configuration
+   - **Error: "Host not found"** - Run `uvx cloudX-proxy list` to verify host configuration
    - **Timeout during connection** - Instance may be starting up (wait 2-3 minutes)
    - **"Installing server" hangs** - Increase `serverInstallTimeout` to 180+ seconds
    - **Connection works in terminal but not VSCode** - Verify `remote.SSH.configFile` setting
@@ -594,10 +596,10 @@ aws sts get-caller-identity --profile your-profile
 aws ssm start-session --target i-1234567890abcdef0 --profile your-profile
 
 # List configured SSH hosts
-uvx cloudx-proxy list --detailed
+uvx cloudX-proxy list --detailed
 
 # Test direct connection (replace with your values)
-uvx cloudx-proxy connect i-1234567890abcdef0 22 --profile your-profile
+uvx cloudX-proxy connect i-1234567890abcdef0 22 --profile your-profile
 ```
 
 ## License

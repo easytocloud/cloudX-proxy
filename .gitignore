@@ -24,7 +24,7 @@ wheels/
 cloudx_client/_version.py
 
 # Virtual Environment
-venv/
+.venv/
 env/
 ENV/
 .direnv/

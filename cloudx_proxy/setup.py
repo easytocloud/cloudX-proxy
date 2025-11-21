@@ -13,9 +13,9 @@ class CloudXSetup:
     # Define SSH key prefix as a constant
     SSH_KEY_PREFIX = "cloudX SSH Key - "
     
-    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None, 
-                 aws_env: str = None, use_1password: str = None, instance_id: str = None, 
-                 non_interactive: bool = False, dry_run: bool = False):
+    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None,
+                 aws_env: str = None, use_1password: str = None, instance_id: str = None,
+                 ssh_host_prefix: str = "cloudx", non_interactive: bool = False, dry_run: bool = False):
         """Initialize cloudx-proxy setup.
         
         Args:
@@ -25,12 +25,14 @@ class CloudXSetup:
             aws_env: AWS environment directory (default: None)
             use_1password: Use 1Password SSH agent for authentication. Can be True/False or a vault name (default: None)
             instance_id: EC2 instance ID to set up connection for (optional)
+            ssh_host_prefix: Prefix for SSH hosts (default: "cloudx")
             non_interactive: Non-interactive mode, use defaults for all prompts (default: False)
             dry_run: Preview mode, show what would be done without executing (default: False)
         """
         self.profile = profile
         self.ssh_key = ssh_key
         self.aws_env = aws_env
+        self.ssh_host_prefix = ssh_host_prefix
         
         # Handle 1Password integration
         if use_1password is None:
@@ -224,11 +226,25 @@ class CloudXSetup:
                     )
 
                     if cloudx_segment:
-                        # Extract env from cloudX-{env}-{user}
+                        # Extract env from cloudX-{env}-{user} or cloudx-{env}-{user}
                         parts = cloudx_segment.split('-')
                         if len(parts) >= 3:
                             self.default_env = parts[1]
                         self.print_status(f"AWS profile '{self.profile}' exists and matches cloudX format", True, 2)
+                        return True
+                    
+                    # Also check for lowercase cloudx- prefix
+                    cloudx_lower_segment = next(
+                        (segment for segment in reversed(path_segments) if segment.startswith('cloudx-')),
+                        None,
+                    )
+                    
+                    if cloudx_lower_segment:
+                        # Extract env from cloudx-{env}-{user}
+                        parts = cloudx_lower_segment.split('-')
+                        if len(parts) >= 3:
+                            self.default_env = parts[1]
+                        self.print_status(f"AWS profile '{self.profile}' exists and matches cloudx format", True, 2)
                         return True
 
                     self.print_status(
@@ -597,9 +613,9 @@ class CloudXSetup:
         
         # Start with metadata comment
         config = f"""
-# Created by cloudx-proxy v{version} on {timestamp}
+# Created by cloudX-proxy v{version} on {timestamp}
 # Configuration type: generic
-Host cloudx-*
+Host {self.ssh_host_prefix}-*
     User ec2-user
     TCPKeepAlive yes
 """
@@ -633,9 +649,9 @@ Host cloudx-*
         
         # Start with metadata comment
         config = f"""
-# Created by cloudx-proxy v{version} on {timestamp}
+# Created by cloudX-proxy v{version} on {timestamp}
 # Configuration type: environment
-Host cloudx-{cloudx_env}-*
+Host {self.ssh_host_prefix}-{cloudx_env}-*
 """
         # Add authentication configuration
         config += self._build_auth_config()
@@ -662,9 +678,9 @@ Host cloudx-{cloudx_env}-*
         
         # Start with metadata comment
         config = f"""
-# Created by cloudx-proxy v{version} on {timestamp}
+# Created by cloudX-proxy v{version} on {timestamp}
 # Configuration type: host
-Host cloudx-{cloudx_env}-{hostname}
+Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
     HostName {instance_id}
 """
         
@@ -725,7 +741,7 @@ Host cloudx-{cloudx_env}-{hostname}
         """
         try:
             # Check if host entry already exists
-            host_pattern = f"cloudx-{cloudx_env}-{hostname}"
+            host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
             if self._check_config_exists(host_pattern, current_config):
                 # Extract existing host configuration
                 host_config, remaining_config = self._extract_host_config(host_pattern, current_config)
@@ -773,11 +789,12 @@ Host cloudx-{cloudx_env}-{hostname}
         Returns:
             Tuple[bool, str]: Success flag, Updated configuration
         """
-        if self._check_config_exists("cloudx-*", current_config):
-            self.print_status("Found existing generic config for cloudx-*", True, 2)
+        pattern = f"{self.ssh_host_prefix}-*"
+        if self._check_config_exists(pattern, current_config):
+            self.print_status(f"Found existing generic config for {pattern}", True, 2)
             return True, current_config
         
-        self.print_status("Creating generic config for cloudx-*", None, 2)
+        self.print_status(f"Creating generic config for {pattern}", None, 2)
         generic_config = self._build_generic_config()
         
         # Append generic config to current config
@@ -798,8 +815,9 @@ Host cloudx-{cloudx_env}-{hostname}
         Returns:
             Tuple[bool, str]: Success flag, Updated configuration
         """
-        if self._check_config_exists(f"cloudx-{cloudx_env}-*", current_config):
-            self.print_status(f"Found existing config for cloudx-{cloudx_env}-*", True, 2)
+        pattern = f"{self.ssh_host_prefix}-{cloudx_env}-*"
+        if self._check_config_exists(pattern, current_config):
+            self.print_status(f"Found existing config for {pattern}", True, 2)
             
             # Option to override if needed
             choice = self.prompt(
@@ -813,7 +831,7 @@ Host cloudx-{cloudx_env}-{hostname}
             if choice == "1":
                 # Remove existing config for this environment
                 self.print_status("Removing existing environment configuration", None, 2)
-                env_config, remaining_config = self._extract_host_config(f"cloudx-{cloudx_env}-*", current_config)
+                env_config, remaining_config = self._extract_host_config(pattern, current_config)
                 
                 # Create new environment config
                 env_config = self._build_environment_config(cloudx_env)
@@ -828,7 +846,7 @@ Host cloudx-{cloudx_env}-{hostname}
             
             return True, current_config
         
-        self.print_status(f"Creating environment config for cloudx-{cloudx_env}-*", None, 2)
+        self.print_status(f"Creating environment config for {pattern}", None, 2)
         env_config = self._build_environment_config(cloudx_env)
         
         # Append environment config to current config
@@ -893,9 +911,9 @@ Host cloudx-{cloudx_env}-{hostname}
         
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would set up SSH configuration with three-tier approach")
-            self.print_status(f"[DRY RUN] Would create generic pattern: cloudx-*", None, 2)
-            self.print_status(f"[DRY RUN] Would create environment pattern: cloudx-{cloudx_env}-*", None, 2)
-            self.print_status(f"[DRY RUN] Would create host entry: cloudx-{cloudx_env}-{hostname} -> {instance_id}", None, 2)
+            self.print_status(f"[DRY RUN] Would create generic pattern: {self.ssh_host_prefix}-*", None, 2)
+            self.print_status(f"[DRY RUN] Would create environment pattern: {self.ssh_host_prefix}-{cloudx_env}-*", None, 2)
+            self.print_status(f"[DRY RUN] Would create host entry: {self.ssh_host_prefix}-{cloudx_env}-{hostname} -> {instance_id}", None, 2)
             self.print_status(f"[DRY RUN] Would write configuration to: {self.ssh_config_file}", None, 2)
             return True
         
@@ -935,7 +953,7 @@ Host cloudx-{cloudx_env}-{hostname}
                 self.print_status("Set config file permissions to 600", True, 2)
             
             # 3. Add or update host entry (lowest level)
-            self.print_status(f"Adding/updating host entry for cloudx-{cloudx_env}-{hostname}", None, 2)
+            self.print_status(f"Adding/updating host entry for {self.ssh_host_prefix}-{cloudx_env}-{hostname}", None, 2)
             if not self._add_host_entry(cloudx_env, instance_id, hostname, current_config):
                 return False
             
@@ -991,9 +1009,9 @@ Host cloudx-{cloudx_env}-{hostname}
 
             self.print_status("SSH configuration summary:", None)
             self.print_status(f"System config: {system_config_path}", None, 2)
-            self.print_status(f"cloudx-proxy config: {self.ssh_config_file}", None, 2)
+            self.print_status(f"cloudX-proxy config: {self.ssh_config_file}", None, 2)
             self.print_status(f"SSH key directory: {self.ssh_dir}", None, 2)
-            self.print_status(f"Connect using: ssh cloudx-{cloudx_env}-{hostname}", None, 2)
+            self.print_status(f"Connect using: ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}", None, 2)
             
             return True
 
@@ -1016,7 +1034,7 @@ Host cloudx-{cloudx_env}-{hostname}
         Returns:
             bool: True if instance is accessible
         """
-        ssh_host = f"cloudx-{cloudx_env}-{hostname}"
+        ssh_host = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
         self.print_status(f"Checking SSH connection to {ssh_host}...", None, 4)
         
         try:
@@ -1074,7 +1092,7 @@ Host cloudx-{cloudx_env}-{hostname}
             self.print_status("Skipping automated connection test on Windows", None, 2)
             print(f"\n\033[96m{'='*60}\033[0m")
             print(f"\033[96mSetup completed! To test your SSH connection, run:\033[0m")
-            print(f"\n  \033[1mssh cloudx-{cloudx_env}-{hostname}\033[0m")
+            print(f"\n  \033[1mssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}\033[0m")
             print(f"\n\033[96m{'='*60}\033[0m\n")
             self.print_status("Configuration files have been created successfully", True, 2)
             return True

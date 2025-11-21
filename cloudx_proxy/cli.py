@@ -107,10 +107,11 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 )
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
+@click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
 def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str,
-          instance: str, hostname: str, non_interactive: bool, dry_run: bool):
+          instance: str, hostname: str, ssh_host_prefix: str, non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     \b
@@ -132,21 +133,30 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
     cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
     """
     try:
+        # Determine default prefix based on command name if not provided
+        if not ssh_host_prefix:
+            cmd_name = os.path.basename(sys.argv[0])
+            if cmd_name == 'cloudX-proxy':
+                ssh_host_prefix = 'cloudX'
+            else:
+                ssh_host_prefix = 'cloudx'
+
         setup = CloudXSetup(
-            profile=profile, 
-            ssh_key=ssh_key, 
-            ssh_config=ssh_config, 
+            profile=profile,
+            ssh_key=ssh_key,
+            ssh_config=ssh_config,
             aws_env=aws_env,
             use_1password=use_1password,
             instance_id=instance,
+            ssh_host_prefix=ssh_host_prefix,
             non_interactive=non_interactive,
             dry_run=dry_run
         )
         
         if dry_run:
-            print("\n\033[1;95m=== cloudx-proxy Setup (DRY RUN) ===\033[0m\n")
+            print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===\033[0m\n")
         else:
-            print("\n\033[1;95m=== cloudx-proxy Setup ===\033[0m\n")
+            print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup ===\033[0m\n")
         
         # Set up AWS profile
         if not setup.setup_aws_profile():

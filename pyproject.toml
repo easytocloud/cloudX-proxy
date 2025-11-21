@@ -41,6 +41,7 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 cloudx-proxy = "cloudx_proxy.cli:cli"
+cloudX-proxy = "cloudx_proxy.cli:cli"
 
 [tool.setuptools_scm]
 write_to = "cloudx_proxy/_version.py"
