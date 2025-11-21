@@ -1,3 +1,5 @@
+## [0.10.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.0...v0.10.1) (2025-11-21)
+
 # [0.10.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.14...v0.10.0) (2025-11-21)
 
 
