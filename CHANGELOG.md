@@ -1,3 +1,10 @@
+## [0.10.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.1...v0.10.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* added reference to cloudX repo for AWS backend ([2c835ef](https://github.com/easytocloud/cloudX-proxy/commit/2c835ef82a44287788003cbf116b24e09509a893))
+
 ## [0.10.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.0...v0.10.1) (2025-11-21)
 
 # [0.10.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.9.14...v0.10.0) (2025-11-21)
