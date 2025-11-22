@@ -1,3 +1,15 @@
+# [0.11.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.2...v0.11.0) (2025-11-22)
+
+
+### Features
+
+* change default values ([0d6e275](https://github.com/easytocloud/cloudX-proxy/commit/0d6e275173edbf292ffc8879078e104f7b4fd43b))
+
+
+### BREAKING CHANGES
+
+* change default values for directory, key and profile
+
 ## [0.10.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.1...v0.10.2) (2025-11-21)
 
 
