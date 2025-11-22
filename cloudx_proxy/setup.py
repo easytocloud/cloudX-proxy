@@ -13,15 +13,16 @@ class CloudXSetup:
     # Define SSH key prefix as a constant
     SSH_KEY_PREFIX = "cloudX SSH Key - "
     
-    def __init__(self, profile: str = "vscode", ssh_key: str = "vscode", ssh_config: str = None,
-                 aws_env: str = None, use_1password: str = None, instance_id: str = None,
+    def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str = None,
+                 ssh_dir: str = None, aws_env: str = None, use_1password: str = None, instance_id: str = None,
                  ssh_host_prefix: str = "cloudx", non_interactive: bool = False, dry_run: bool = False):
         """Initialize cloudx-proxy setup.
         
         Args:
-            profile: AWS profile name (default: "vscode")
-            ssh_key: SSH key name (default: "vscode")
-            ssh_config: SSH config file path (default: None, uses ~/.ssh/vscode/config)
+            profile: AWS profile name (default: "cloudX")
+            ssh_key: SSH key name (default: "cloudX")
+            ssh_config: SSH config file path (default: None)
+            ssh_dir: Directory for SSH keys and config (default: None)
             aws_env: AWS environment directory (default: None)
             use_1password: Use 1Password SSH agent for authentication. Can be True/False or a vault name (default: None)
             instance_id: EC2 instance ID to set up connection for (optional)
@@ -51,12 +52,28 @@ class CloudXSetup:
         self.onepassword_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         self.onepassword_agent_sock_macos = Path(self.home_dir) / "Library" / "Group Containers" / "2BUA8C4S2C.com.1password" / "t" / "agent.sock"
         
+        self.pending_migration = False
+        
         # Set up ssh config paths based on provided config or default
-        if ssh_config:
+        if ssh_dir:
+            self.ssh_dir = Path(os.path.expanduser(ssh_dir))
+            self.ssh_config_file = self.ssh_dir / "config"
+        elif ssh_config:
             self.ssh_config_file = Path(os.path.expanduser(ssh_config))
             self.ssh_dir = self.ssh_config_file.parent
         else:
-            self.ssh_dir = Path(self.home_dir) / ".ssh" / "vscode"
+            # Default logic: check for vscode, but default to cloudX
+            cloudx_dir = Path(self.home_dir) / ".ssh" / "cloudX"
+            vscode_dir = Path(self.home_dir) / ".ssh" / "vscode"
+            
+            if vscode_dir.exists() and not cloudx_dir.exists():
+                # Existing vscode setup found, mark for potential migration
+                self.ssh_dir = vscode_dir
+                self.pending_migration = True
+            else:
+                # Default to cloudX
+                self.ssh_dir = cloudx_dir
+                
             self.ssh_config_file = self.ssh_dir / "config"
         
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
@@ -484,11 +501,11 @@ class CloudXSetup:
         self.print_status(f"Checking SSH key '{self.ssh_key}' configuration...")
         
         try:
-            # Create .ssh/vscode directory if it doesn't exist
+            # Create SSH directory if it doesn't exist
             self.ssh_dir.mkdir(parents=True, exist_ok=True)
             self.print_status("SSH directory exists", True, 2)
             
-            # Set proper permissions on the vscode directory
+            # Set proper permissions on the SSH directory
             if not self._set_directory_permissions(self.ssh_dir):
                 return False
             
@@ -559,15 +576,21 @@ class CloudXSetup:
             str: The complete ProxyCommand string
         """
         proxy_command = "uvx cloudx-proxy connect %h %p"
-        if self.profile != "vscode":
-            proxy_command += f" --profile {self.profile}"
+        
+        # Always include profile and ssh-key to ensure connect has all information
+        proxy_command += f" --profile {self.profile}"
+        
         if self.aws_env:
             proxy_command += f" --aws-env {self.aws_env}"
-        if self.ssh_key != "vscode":
-            proxy_command += f" --ssh-key {self.ssh_key}"
-        # Add ssh_config parameter if it's not the default
-        default_config = Path(os.path.expanduser("~/.ssh/vscode/config"))
-        if str(self.ssh_config_file) != str(default_config):
+            
+        proxy_command += f" --ssh-key {self.ssh_key}"
+        
+        # Always include ssh-dir or ssh-config
+        # If the config file is standard (ssh_dir/config), use ssh-dir
+        if self.ssh_config_file == self.ssh_dir / "config":
+            proxy_command += f" --ssh-dir {self.ssh_dir}"
+        else:
+            # Non-standard config file location, use ssh-config
             proxy_command += f" --ssh-config {self.ssh_config_file}"
             
         return proxy_command
@@ -1124,4 +1147,116 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
         if continue_setup:
             self.print_status("Continuing setup despite SSH access issues", None, 2)
             return True
+        return False
+
+    def migrate_to_cloudx(self, target_dir: Path = None) -> bool:
+        """Migrate from ~/.ssh/vscode to ~/.ssh/cloudX (or specified target).
+        
+        Args:
+            target_dir: Target directory (default: ~/.ssh/cloudX)
+            
+        Returns:
+            bool: True if migration was successful
+        """
+        if not target_dir:
+            target_dir = Path(self.home_dir) / ".ssh" / "cloudX"
+            
+        vscode_dir = Path(self.home_dir) / ".ssh" / "vscode"
+        
+        self.print_header("Migration")
+        
+        if self.dry_run:
+            self.print_status(f"[DRY RUN] Would migrate from {vscode_dir} to {target_dir}")
+            self.print_status(f"[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
+            return True
+            
+        if not vscode_dir.exists():
+            self.print_status(f"Source directory {vscode_dir} does not exist", False, 2)
+            return False
+            
+        if target_dir.exists():
+            self.print_status(f"Target directory {target_dir} already exists", False, 2)
+            return False
+            
+        try:
+            # Rename directory
+            self.print_status(f"Renaming {vscode_dir} to {target_dir}...", None, 2)
+            vscode_dir.rename(target_dir)
+            self.print_status("Directory renamed successfully", True, 2)
+            
+            # Update system SSH config
+            system_config_path = Path(self.home_dir) / ".ssh" / "config"
+            if system_config_path.exists():
+                content = system_config_path.read_text()
+                
+                # Remove old include
+                lines = content.splitlines()
+                new_lines = []
+                include_removed = False
+                
+                for line in lines:
+                    if "Include" in line and "vscode/config" in line:
+                        include_removed = True
+                        continue
+                    new_lines.append(line)
+                
+                # Add new include
+                new_include = f"Include {target_dir}/config"
+                if new_include not in content:
+                    new_lines.append(new_include)
+                    
+                system_config_path.write_text("\n".join(new_lines) + "\n")
+                
+                if include_removed:
+                    self.print_status("Updated ~/.ssh/config: Removed old Include, added new Include", True, 2)
+                else:
+                    self.print_status("Updated ~/.ssh/config: Added new Include", True, 2)
+            
+            # Update internal state
+            self.ssh_dir = target_dir
+            self.ssh_config_file = self.ssh_dir / "config"
+            self.ssh_key_file = self.ssh_dir / f"{self.ssh_key}"
+            
+            return True
+            
+        except Exception as e:
+            self.print_status(f"Migration failed: {str(e)}", False, 2)
+            return False
+
+    def check_and_perform_migration(self) -> bool:
+        """Check if migration is needed and perform it if user agrees.
+        
+        Returns:
+            bool: True if migration was performed, False otherwise
+        """
+        if not self.pending_migration:
+            return False
+            
+        self.print_header("Migration Available")
+        self.print_status("Found existing configuration in ~/.ssh/vscode", None, 2)
+        self.print_status("The default directory is now ~/.ssh/cloudX", None, 2)
+        
+        if self.non_interactive:
+            self.print_status("Skipping migration in non-interactive mode", None, 2)
+            return False
+            
+        should_migrate = self.prompt("Do you want to migrate to ~/.ssh/cloudX?", "Y").lower() != 'n'
+        
+        if should_migrate:
+            if self.migrate_to_cloudx():
+                self.pending_migration = False
+                return True
+        
+        self.print_status("Continuing with existing ~/.ssh/vscode configuration", None, 2)
+        
+        # Revert to legacy defaults if using new defaults and migration was declined
+        # This ensures we continue to work with vscode defaults in legacy mode
+        if self.profile == "cloudX":
+            self.profile = "vscode"
+            self.print_status("Using legacy profile 'vscode'", None, 2)
+            
+        if self.ssh_key == "cloudX":
+            self.ssh_key = "vscode"
+            self.print_status("Using legacy SSH key 'vscode'", None, 2)
+            
         return False

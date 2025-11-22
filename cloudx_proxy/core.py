@@ -6,8 +6,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 class CloudXProxy:
-    def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode", 
-                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None, aws_env: str = None, dry_run: bool = False):
+    def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode",
+                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None,
+                 ssh_dir: str = None, aws_env: str = None, dry_run: bool = False):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -16,6 +17,8 @@ class CloudXProxy:
             profile: AWS profile to use (default: "vscode")
             region: AWS region (default: from profile)
             ssh_key: SSH key name to use (default: "vscode")
+            ssh_config: Path to SSH config file (optional)
+            ssh_dir: Directory for SSH keys and config (optional)
             aws_env: AWS environment directory (default: None, uses ~/.aws)
             dry_run: Preview mode, show what would be done without executing (default: False)
         """
@@ -49,12 +52,26 @@ class CloudXProxy:
             if not region:
                 region = 'eu-west-1'  # Default for dry-run display
         self.region = region
+
         # Set up SSH configuration and key paths
-        if ssh_config:
+        if ssh_dir:
+            self.ssh_dir = os.path.expanduser(ssh_dir)
+            self.ssh_config_file = os.path.join(self.ssh_dir, "config")
+        elif ssh_config:
             self.ssh_config_file = os.path.expanduser(ssh_config)
             self.ssh_dir = os.path.dirname(self.ssh_config_file)
         else:
-            self.ssh_dir = os.path.expanduser("~/.ssh/vscode")
+            # Fallback logic: check for cloudX, then vscode, default to cloudX
+            cloudx_dir = os.path.expanduser("~/.ssh/cloudX")
+            vscode_dir = os.path.expanduser("~/.ssh/vscode")
+            
+            if os.path.exists(cloudx_dir):
+                self.ssh_dir = cloudx_dir
+            elif os.path.exists(vscode_dir):
+                self.ssh_dir = vscode_dir
+            else:
+                self.ssh_dir = cloudx_dir
+                
             self.ssh_config_file = os.path.join(self.ssh_dir, "config")
             
         self.ssh_key = os.path.join(self.ssh_dir, f"{ssh_key}.pub")

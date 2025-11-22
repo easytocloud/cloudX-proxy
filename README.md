@@ -43,7 +43,7 @@ Using AWS Systems Manager Session Manager, it eliminates the need for direct SSH
 
 3. **Configure VSCode:**
    - Install "Remote - SSH" extension
-   - Add to settings.json: `"remote.SSH.configFile": "~/.ssh/vscode/config"`
+   - Add to settings.json: `"remote.SSH.configFile": "~/.ssh/cloudX/config"`
    - Set SSH timeout: `"remote.SSH.connectTimeout": 90`
 
 4. **Connect:**
@@ -102,7 +102,7 @@ The cloudX-proxy package is available on PyPI and can run using uvx without expl
 cloudX-proxy includes a setup command that automates the entire configuration process:
 
 ```bash
-# Basic setup with defaults (vscode profile and key)
+# Basic setup with defaults (cloudX profile and key)
 uvx cloudX-proxy setup
 
 # Setup with custom profile and key
@@ -112,7 +112,7 @@ uvx cloudX-proxy setup --profile myprofile --ssh-key mykey
 uvx cloudX-proxy setup --aws-env prod
 
 # Setup with custom SSH config location
-uvx cloudX-proxy setup --ssh-config ~/.ssh/cloudx/config
+uvx cloudX-proxy setup --ssh-config ~/.ssh/custom/config
 
 # Setup with 1Password integration
 uvx cloudX-proxy setup --1password
@@ -133,7 +133,7 @@ The setup command will:
 
 2. Manage SSH Keys:
    - Creates new SSH key pair if needed
-     * Defaults to key name "vscode" in ~/.ssh/vscode/
+     * Defaults to key name "cloudX" in ~/.ssh/cloudX/
      * Custom key name/location via --ssh-key and --ssh-config
    - Fully supports 1Password integration:
      * Using 1Password SSH agent via `--1password` flag
@@ -142,7 +142,7 @@ The setup command will:
      * Follows SSH best practices using public keys to limit authentication attempts
 
 3. Configure SSH:
-   - Creates SSH configs with proper settings (default: ~/.ssh/vscode/config)
+   - Creates SSH configs with proper settings (default: ~/.ssh/cloudX/config)
    - Custom config location can be specified with `--ssh-config`
    - Sets up optimized environment-specific configurations
    - Configures ProxyCommand with all necessary parameters
@@ -178,9 +178,9 @@ Host cloudX-*
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: environment
 Host cloudX-dev-*
-    IdentityFile ~/.ssh/vscode/mykey
+    IdentityFile ~/.ssh/cloudX/mykey
     IdentitiesOnly yes
-    ProxyCommand uvx cloudX-proxy connect %h %p --profile myprofile --ssh-key mykey
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile myprofile --ssh-key mykey --ssh-dir ~/.ssh/cloudX
 
 # Host configuration (specific to a single instance)
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
@@ -264,7 +264,7 @@ After completing the setup, configure VSCode to use the SSH configuration create
    Add these settings to your VSCode settings.json (Command Palette → "Preferences: Open Settings (JSON)"):
    ```json
    {
-       "remote.SSH.configFile": "~/.ssh/vscode/config",
+       "remote.SSH.configFile": "~/.ssh/cloudX/config",
        "remote.SSH.connectTimeout": 90,
        "remote.SSH.serverInstallTimeout": 120,
        "remote.SSH.showLoginTerminal": true,
@@ -351,9 +351,10 @@ uvx cloudX-proxy setup [OPTIONS]
 ```
 
 Options:
-- `--profile` (default: vscode): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.  When the profile is an SSO profile (role), ensure you have logged in using `aws sso login --profile {profile}` before running the setup and when connecting.
-- `--ssh-key` (default: vscode): Name of the SSH key to create/use. The key will be stored in the SSH config directory. This same name can be used in the connect command.
-- `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/vscode/config.
+- `--profile` (default: cloudX): AWS profile to use. The profile's IAM user should follow the format cloudX-{env}-{user}. The environment part will be used as the default environment during setup.  When the profile is an SSO profile (role), ensure you have logged in using `aws sso login --profile {profile}` before running the setup and when connecting.
+- `--ssh-key` (default: cloudX): Name of the SSH key to create/use. The key will be stored in the SSH config directory. This same name can be used in the connect command.
+- `--ssh-config` (optional): Path to the SSH config file to use. If specified, configuration and keys will be stored in this location. Default is ~/.ssh/cloudX/config.
+- `--ssh-dir` (optional): Directory for SSH keys and config. Default is ~/.ssh/cloudX.
 - `--1password` (optional): Enable 1Password SSH agent integration. Can be used as a flag or with a vault name (e.g., `--1password Private`). First searches all vaults for existing keys with name "cloudX SSH Key - {keyname}". If no existing key found, creates new keys directly in the specified (or selected) 1Password vault and configures SSH to use the 1Password SSH agent. If a vault name is specified, that vault will be used for key storage. By default, the "Private" vault is used when no vault specified. Note that only the "Private" vault is enabled for SSH by default in 1Password settings - other vaults must be manually enabled in 1Password SSH agent settings.
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
@@ -419,7 +420,7 @@ uvx cloudX-proxy list [OPTIONS]
 ```
 
 Options:
-- `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/vscode/config.
+- `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/cloudX/config.
 - `--environment` (optional): Filter hosts by environment (e.g., dev, prod). If not specified, shows all environments.
 - `--detailed` (flag): Show detailed information including instance IDs.
 - `--dry-run` (flag): Preview list output format without actually reading the SSH configuration.
@@ -524,7 +525,7 @@ These permissions are required to bootstrap the instance, so that after creation
 2. **Setup Issues**
    - If AWS profile validation fails, ensure your user ARN matches the cloudX-{env}-{user} format
    - For 1Password integration, ensure the CLI is installed and you're signed in
-   - Check that ~/.ssh/vscode directory has proper permissions (700)
+   - Check that ~/.ssh/cloudX directory has proper permissions (700)
    - Verify main ~/.ssh/config is writable
 
 2. **VSCode Connection Issues**

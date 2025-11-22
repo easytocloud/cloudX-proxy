@@ -45,7 +45,8 @@ Main commands:
 \b
   setup     - Configure AWS profile, SSH keys, and SSH configuration
   connect   - Connect to an EC2 instance via SSM
-  list      - List configured SSH hosts"""
+  list      - List configured SSH hosts
+  migrate   - Migrate from legacy vscode directory to cloudX"""
     pass
 
 @cli.command()
@@ -55,9 +56,10 @@ Main commands:
 @click.option('--region', help='AWS region (default: from profile, or eu-west-1 if not set)')
 @click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
 @click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
+@click.option('--ssh-dir', help='Directory for SSH keys and config')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option('--dry-run', is_flag=True, help='Preview connection workflow without executing')
-def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, aws_env: str, dry_run: bool):
+def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, dry_run: bool):
     """Connect to an EC2 instance via SSM.
     
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
@@ -78,6 +80,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             region=region,
             ssh_key=ssh_key,
             ssh_config=ssh_config,
+            ssh_dir=ssh_dir,
             aws_env=aws_env,
             dry_run=dry_run
         )
@@ -92,9 +95,10 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
         sys.exit(1)
 
 @cli.command()
-@click.option('--profile', default='vscode', help='AWS profile to use (default: vscode)')
-@click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
-@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
+@click.option('--profile', default='cloudX', help='AWS profile to use (default: cloudX)')
+@click.option('--ssh-key', default='cloudX', help='SSH key name to use (default: cloudX)')
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/cloudX/config)')
+@click.option('--ssh-dir', help='Directory for SSH keys and config (default: ~/.ssh/cloudX)')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option(
     '--1password',
@@ -110,7 +114,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
-def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1password: str,
+def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, use_1password: str,
           instance: str, hostname: str, ssh_host_prefix: str, non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
@@ -145,6 +149,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
             profile=profile,
             ssh_key=ssh_key,
             ssh_config=ssh_config,
+            ssh_dir=ssh_dir,
             aws_env=aws_env,
             use_1password=use_1password,
             instance_id=instance,
@@ -157,6 +162,9 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
             print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===\033[0m\n")
         else:
             print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup ===\033[0m\n")
+        
+        # Check for migration
+        setup.check_and_perform_migration()
         
         # Set up AWS profile
         if not setup.setup_aws_profile():
@@ -194,7 +202,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, aws_env: str, use_1passwo
         sys.exit(1)
 
 @cli.command()
-@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/cloudX/config)')
 @click.option('--environment', help='Filter hosts by environment (e.g., dev, prod)')
 @click.option('--detailed', is_flag=True, help='Show detailed information including instance IDs')
 @click.option('--dry-run', is_flag=True, help='Preview list output format')
@@ -217,7 +225,16 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         if ssh_config:
             config_file = Path(os.path.expanduser(ssh_config))
         else:
-            config_file = Path(os.path.expanduser("~/.ssh/vscode/config"))
+            # Check for cloudX config first, then vscode
+            cloudx_config = Path(os.path.expanduser("~/.ssh/cloudX/config"))
+            vscode_config = Path(os.path.expanduser("~/.ssh/vscode/config"))
+            
+            if cloudx_config.exists():
+                config_file = cloudx_config
+            elif vscode_config.exists():
+                config_file = vscode_config
+            else:
+                config_file = cloudx_config
         
         if dry_run:
             print(f"\n\033[1;95m=== cloudx-proxy List (DRY RUN) ===\033[0m\n")
@@ -301,6 +318,29 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         print("  Connect with SSH:  \033[96mssh <hostname>\033[0m")
         print("  Connect with VSCode: Use Remote Explorer in VSCode")
         
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
+
+@cli.command()
+@click.option('--target-dir', help='Target directory for migration (default: ~/.ssh/cloudX)')
+@click.option('--dry-run', is_flag=True, help='Preview migration without executing')
+def migrate(target_dir: str, dry_run: bool):
+    """Migrate from legacy vscode directory to cloudX.
+    
+    This command moves the configuration from ~/.ssh/vscode to ~/.ssh/cloudX
+    (or another specified directory) and updates ~/.ssh/config.
+    """
+    try:
+        setup = CloudXSetup(dry_run=dry_run)
+        
+        target_path = Path(os.path.expanduser(target_dir)) if target_dir else None
+        
+        if setup.migrate_to_cloudx(target_path):
+            print("\n\033[92mMigration completed successfully!\033[0m")
+        else:
+            sys.exit(1)
+            
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
