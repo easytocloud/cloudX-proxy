@@ -1004,26 +1004,49 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
                 self.print_status("Using system SSH config directly, no Include needed", True, 2)
             else:
                 # Otherwise, make sure the system config includes our config file
-                include_line = f"Include {self.ssh_config_file}\n"
-                
+                # Insert before any Host blocks to avoid the Include becoming part of a Host block
+                include_line = f"Include {self.ssh_config_file}"
+
                 if system_config_path.exists():
                     content = system_config_path.read_text()
-                    if include_line not in content:
-                        with open(system_config_path, 'a') as f:
-                            f.write(f"\n{include_line}")
-                        self.print_status("Added include line to system SSH config", True, 2)
-                    else:
+
+                    # Check if Include already exists
+                    if include_line in content:
                         self.print_status("System SSH config already includes our config", True, 2)
-                    
+                    else:
+                        # Find the first Host or Match block
+                        lines = content.splitlines()
+                        insert_position = None
+
+                        for i, line in enumerate(lines):
+                            stripped = line.strip()
+                            if stripped.startswith('Host ') or stripped.startswith('Match '):
+                                # Found first Host or Match block, insert before it
+                                insert_position = i
+                                break
+
+                        if insert_position is not None:
+                            # Insert before the first Host/Match block
+                            lines.insert(insert_position, include_line)
+                            # Add a blank line after for readability
+                            lines.insert(insert_position + 1, "")
+                            new_content = "\n".join(lines)
+                        else:
+                            # No Host blocks found, append at end with proper spacing
+                            new_content = content.rstrip() + "\n\n" + include_line + "\n"
+
+                        system_config_path.write_text(new_content)
+                        self.print_status("Added include line to system SSH config", True, 2)
+
                     # Set correct permissions on system config file
                     if platform.system() != 'Windows':
                         import stat
                         system_config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
                         self.print_status("Set system config file permissions to 600", True, 2)
                 else:
-                    system_config_path.write_text(include_line)
+                    system_config_path.write_text(include_line + "\n")
                     self.print_status("Created system SSH config with include line", True, 2)
-                    
+
                     # Set correct permissions on newly created system config file
                     if platform.system() != 'Windows':
                         import stat
