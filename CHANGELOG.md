@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.11.1...v0.12.0) (2026-01-09)
+
+
+### Features
+
+* add EC2 instance ID validation ([25fdba1](https://github.com/easytocloud/cloudX-proxy/commit/25fdba1ea79842d7555b19cdfb9a976823f20487))
+
 ## [0.11.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.11.0...v0.11.1) (2026-01-09)
 
 
