@@ -1,3 +1,10 @@
+## [0.11.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.11.0...v0.11.1) (2026-01-09)
+
+
+### Bug Fixes
+
+* insert SSH config Include before Host blocks ([005cc07](https://github.com/easytocloud/cloudX-proxy/commit/005cc07de0badfb7bb994792c3d2733ac0f5fbf0))
+
 # [0.11.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.10.2...v0.11.0) (2025-11-22)
 
 
