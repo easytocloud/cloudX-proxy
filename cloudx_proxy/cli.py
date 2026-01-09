@@ -61,9 +61,9 @@ Main commands:
 @click.option('--dry-run', is_flag=True, help='Preview connection workflow without executing')
 def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, dry_run: bool):
     """Connect to an EC2 instance via SSM.
-    
+
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
-    
+
     \b
     Example usage:
     \b
@@ -73,6 +73,13 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
     try:
+        # Validate instance ID format
+        if not CloudXSetup.validate_instance_id(instance_id):
+            print(f"Error: Invalid EC2 instance ID format: {instance_id}", file=sys.stderr)
+            print("Instance IDs must start with 'i-' followed by 8 or 17 hexadecimal characters", file=sys.stderr)
+            print("Examples: i-1234567890abcdef0 or i-12345678", file=sys.stderr)
+            sys.exit(1)
+
         client = CloudXProxy(
             instance_id=instance_id,
             port=port,
@@ -176,10 +183,29 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         
         # Get environment and instance details
         cloudx_env = setup.prompt("Enter environment", getattr(setup, 'default_env', None))
-        
+
         # Use the --instance parameter if provided, otherwise prompt
         instance_id = instance or setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
-        
+
+        # Validate instance ID format
+        if not CloudXSetup.validate_instance_id(instance_id):
+            setup.print_status(
+                f"Invalid EC2 instance ID format: {instance_id}",
+                False,
+                2
+            )
+            setup.print_status(
+                "Instance IDs must start with 'i-' followed by 8 or 17 hexadecimal characters",
+                None,
+                2
+            )
+            setup.print_status(
+                "Examples: i-1234567890abcdef0 or i-12345678",
+                None,
+                2
+            )
+            sys.exit(1)
+
         # Use --hostname if provided, otherwise generate default based on instance ID in non-interactive mode
         if hostname:
             # If hostname is explicitly provided, use it directly

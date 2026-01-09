@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import json
 import subprocess
@@ -12,6 +13,27 @@ from ._1password import check_1password_cli, check_ssh_agent, list_ssh_keys, cre
 class CloudXSetup:
     # Define SSH key prefix as a constant
     SSH_KEY_PREFIX = "cloudX SSH Key - "
+
+    @staticmethod
+    def validate_instance_id(instance_id: str) -> bool:
+        """Validate EC2 instance ID format.
+
+        EC2 instance IDs must:
+        - Start with 'i-'
+        - Be followed by 8 or 17 hexadecimal characters
+
+        Args:
+            instance_id: The instance ID to validate
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not instance_id:
+            return False
+
+        # Match i- followed by exactly 8 or 17 hexadecimal characters
+        pattern = r'^i-[0-9a-f]{8}$|^i-[0-9a-f]{17}$'
+        return bool(re.match(pattern, instance_id, re.IGNORECASE))
     
     def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str = None,
                  ssh_dir: str = None, aws_env: str = None, use_1password: str = None, instance_id: str = None,
