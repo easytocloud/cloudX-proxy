@@ -1,3 +1,10 @@
+# [0.13.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.12.0...v0.13.0) (2026-01-16)
+
+
+### Features
+
+* add consistent colorized output across all commands ([a32a4ee](https://github.com/easytocloud/cloudX-proxy/commit/a32a4ee7a2da210b88ea0b2ce3570c4d8f3550b7))
+
 # [0.12.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.11.1...v0.12.0) (2026-01-09)
 
 
