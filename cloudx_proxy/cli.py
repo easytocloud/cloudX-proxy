@@ -6,6 +6,7 @@ import click
 from . import __version__
 from .core import CloudXProxy
 from .setup import CloudXSetup
+from .colors import header, success, error as color_error, info, format_instance_id, format_hostname, format_command, secondary
 
 
 class OptionalValueOption(click.Option):
@@ -75,7 +76,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     try:
         # Validate instance ID format
         if not CloudXSetup.validate_instance_id(instance_id):
-            print(f"Error: Invalid EC2 instance ID format: {instance_id}", file=sys.stderr)
+            print(color_error(f"Error: Invalid EC2 instance ID format: {instance_id}"), file=sys.stderr)
             print("Instance IDs must start with 'i-' followed by 8 or 17 hexadecimal characters", file=sys.stderr)
             print("Examples: i-1234567890abcdef0 or i-12345678", file=sys.stderr)
             sys.exit(1)
@@ -98,7 +99,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             sys.exit(1)
             
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -166,9 +167,9 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         )
         
         if dry_run:
-            print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===\033[0m\n")
+            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===')}\n")
         else:
-            print(f"\n\033[1;95m=== {ssh_host_prefix}-proxy Setup ===\033[0m\n")
+            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup ===')}\n")
         
         # Check for migration
         setup.check_and_perform_migration()
@@ -224,7 +225,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             sys.exit(1)
         
     except Exception as e:
-        print(f"\n\033[91mError: {str(e)}\033[0m", file=sys.stderr)
+        print(f"\n{color_error(f'Error: {str(e)}')}", file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -320,32 +321,32 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             return
             
         # Print header
-        print(f"\n\033[1;95m=== cloudx-proxy Configured Hosts ===\033[0m\n")
-        
+        print(f"\n{header('=== cloudx-proxy Configured Hosts ===')}\n")
+
         # Print generic patterns if any and detailed mode
         if generic_hosts and detailed:
-            print("\033[1;94mGeneric Patterns:\033[0m")
+            print(info("Generic Patterns:"))
             for hostname, instance_id in generic_hosts:
-                print(f"  {hostname}")
+                print(f"  {format_hostname(hostname)}")
             print()
-            
+
         # Print environments and hosts
         for env, hosts in sorted(environments.items()):
-            print(f"\033[1;94mEnvironment: {env}\033[0m")
+            print(info(f"Environment: {env}"))
             for hostname, name, instance_id in sorted(hosts, key=lambda x: x[1]):
                 if detailed:
-                    print(f"  {name} \033[90m({hostname})\033[0m -> \033[93m{instance_id}\033[0m")
+                    print(f"  {name} {secondary(f'({hostname})')} → {format_instance_id(instance_id)}")
                 else:
-                    print(f"  {name} \033[90m({hostname})\033[0m")
+                    print(f"  {name} {secondary(f'({hostname})')}")
             print()
-            
+
         # Print usage hint
-        print("\033[1;93mUsage:\033[0m")
-        print("  Connect with SSH:  \033[96mssh <hostname>\033[0m")
+        print(info("Usage:"))
+        print(f"  Connect with SSH:  {format_command('ssh <hostname>')}")
         print("  Connect with VSCode: Use Remote Explorer in VSCode")
         
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -368,7 +369,7 @@ def migrate(target_dir: str, dry_run: bool):
             sys.exit(1)
             
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':

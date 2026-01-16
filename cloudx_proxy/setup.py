@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
 from ._1password import check_1password_cli, check_ssh_agent, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
+from .colors import header, success, error, warning, info, prompt as color_prompt, status_symbol, format_path, format_command
 
 class CloudXSetup:
     # Define SSH key prefix as a constant
@@ -139,28 +140,22 @@ class CloudXSetup:
 
     def print_header(self, text: str) -> None:
         """Print a section header.
-        
+
         Args:
             text: The header text
         """
-        print(f"\n\n\033[1;94m=== {text} ===\033[0m")
+        print(f"\n\n{header(f'=== {text} ===')}")
 
     def print_status(self, message: str, status: bool = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
-        
+
         Args:
             message: The message to print
             status: True for success (✓), False for failure (✗), None for no symbol
             indent: Number of spaces to indent
         """
         prefix = " " * indent
-        if status is not None:
-            symbol = "✓" if status else "✗"
-            color = "\033[92m" if status else "\033[91m"  # Green for success, red for failure
-            reset = "\033[0m"
-            print(f"{prefix}{color}{symbol}{reset} {message}")
-        else:
-            print(f"{prefix}○ {message}")
+        print(f"{prefix}{status_symbol(status)} {message}")
 
     def prompt(self, message: str, default: str = None) -> str:
         """Display a colored prompt for user input.
@@ -183,9 +178,9 @@ class CloudXSetup:
         
         # Interactive prompt
         if default:
-            prompt_text = f"\033[93m{message} [{default}]: \033[0m"
+            prompt_text = f"{color_prompt(message)} [{default}]: "
         else:
-            prompt_text = f"\033[93m{message}: \033[0m"
+            prompt_text = f"{color_prompt(message)}: "
         response = input(prompt_text)
         return response if response else default
 
@@ -237,7 +232,7 @@ class CloudXSetup:
                 # Profile doesn't exist, create it
                 self.print_status(f"AWS profile '{self.profile}' not found", False, 2)
                 self.print_status("Setting up AWS profile...", None, 2)
-                print("\033[96mPlease enter your AWS credentials:\033[0m")
+                print(info("Please enter your AWS credentials:"))
                 
                 # Use aws configure command
                 subprocess.run([
@@ -356,9 +351,9 @@ class CloudXSetup:
         
         # If using a vault other than "Private", warn the user
         if self.op_vault and self.op_vault != "Private":
-            self.print_status(f"\033[93mWarning: Using vault '{self.op_vault}' instead of default 'Private' vault\033[0m", None, 2)
-            self.print_status("\033[93mMake sure to enable this vault for SSH in 1Password settings\033[0m", None, 2)
-            self.print_status("\033[93mBy default, only the 'Private' vault is enabled for SSH\033[0m", None, 2)
+            self.print_status(warning(f"Warning: Using vault '{self.op_vault}' instead of default 'Private' vault"), None, 2)
+            self.print_status(warning("Make sure to enable this vault for SSH in 1Password settings"), None, 2)
+            self.print_status(warning("By default, only the 'Private' vault is enabled for SSH"), None, 2)
         
         return True
 
@@ -481,7 +476,7 @@ class CloudXSetup:
                 return False
             
             # Remind user to enable the key in 1Password SSH agent
-            self.print_status("\033[93mImportant: Make sure the key is enabled in 1Password's SSH agent settings\033[0m", None, 2)
+            self.print_status(warning("Important: Make sure the key is enabled in 1Password's SSH agent settings"), None, 2)
             return True
             
         except Exception as e:
@@ -1076,10 +1071,10 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
                         self.print_status("Set system config file permissions to 600", True, 2)
 
             self.print_status("SSH configuration summary:", None)
-            self.print_status(f"System config: {system_config_path}", None, 2)
-            self.print_status(f"cloudX-proxy config: {self.ssh_config_file}", None, 2)
-            self.print_status(f"SSH key directory: {self.ssh_dir}", None, 2)
-            self.print_status(f"Connect using: ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}", None, 2)
+            self.print_status(f"System config: {format_path(str(system_config_path))}", None, 2)
+            self.print_status(f"cloudX-proxy config: {format_path(str(self.ssh_config_file))}", None, 2)
+            self.print_status(f"SSH key directory: {format_path(str(self.ssh_dir))}", None, 2)
+            self.print_status(f"Connect using: {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}", None, 2)
             
             return True
 
@@ -1158,10 +1153,10 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
         # Instead, provide clear instructions for manual testing
         if platform.system() == 'Windows':
             self.print_status("Skipping automated connection test on Windows", None, 2)
-            print(f"\n\033[96m{'='*60}\033[0m")
-            print(f"\033[96mSetup completed! To test your SSH connection, run:\033[0m")
-            print(f"\n  \033[1mssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}\033[0m")
-            print(f"\n\033[96m{'='*60}\033[0m\n")
+            print(f"\n{info('='*60)}")
+            print(info("Setup completed! To test your SSH connection, run:"))
+            print(f"\n  {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}")
+            print(f"\n{info('='*60)}\n")
             self.print_status("Configuration files have been created successfully", True, 2)
             return True
         
