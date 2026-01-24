@@ -1,3 +1,10 @@
+## [0.13.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.0...v0.13.1) (2026-01-24)
+
+
+### Bug Fixes
+
+* use tags when possible to find Environment and hostname ([8dc56d6](https://github.com/easytocloud/cloudX-proxy/commit/8dc56d6d3585e85f61b7bebd5c12a4b3f674b10f))
+
 # [0.13.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.12.0...v0.13.0) (2026-01-16)
 
 
