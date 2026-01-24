@@ -1,3 +1,10 @@
+## [0.13.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.2...v0.13.3) (2026-01-24)
+
+
+### Bug Fixes
+
+* BREAKING FIX dropped python3.9 support ([79faf4c](https://github.com/easytocloud/cloudX-proxy/commit/79faf4cd5cbbf7e7f75274514c4f6514d912ffba))
+
 ## [0.13.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.1...v0.13.2) (2026-01-24)
 
 ## [0.13.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.0...v0.13.1) (2026-01-24)
