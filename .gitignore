@@ -16,6 +16,8 @@ parts/
 sdist/
 var/
 wheels/
+cloudx_proxy/_version.py
+
 *.egg-info/
 .installed.cfg
 *.egg
@@ -38,3 +40,5 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+

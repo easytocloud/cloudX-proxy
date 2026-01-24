@@ -35,6 +35,69 @@ class CloudXSetup:
         # Match i- followed by exactly 8 or 17 hexadecimal characters
         pattern = r'^i-[0-9a-f]{8}$|^i-[0-9a-f]{17}$'
         return bool(re.match(pattern, instance_id, re.IGNORECASE))
+
+    def get_instance_tags(self, instance_id: str) -> Tuple[Optional[str], Optional[str]]:
+        """Fetch instance tags and extract environment and hostname.
+
+        Queries EC2 for the instance tags and extracts:
+        - Environment from the 'Environment' tag
+        - Hostname from the 'Name' tag (expects format: cloudX-{env}-{hostname} | {username})
+
+        Args:
+            instance_id: The EC2 instance ID
+
+        Returns:
+            Tuple[Optional[str], Optional[str]]: (environment, hostname) or (None, None) on failure
+        """
+        try:
+            # Configure AWS environment if specified
+            if self.aws_env:
+                aws_env_dir = os.path.expanduser(f"~/.aws/aws-envs/{self.aws_env}")
+                os.environ["AWS_CONFIG_FILE"] = os.path.join(aws_env_dir, "config")
+                os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.path.join(aws_env_dir, "credentials")
+
+            session = boto3.Session(profile_name=self.profile)
+            ec2 = session.client('ec2')
+
+            response = ec2.describe_instances(InstanceIds=[instance_id])
+
+            if not response['Reservations'] or not response['Reservations'][0]['Instances']:
+                self.print_status(f"Instance {instance_id} not found", False, 2)
+                return None, None
+
+            instance = response['Reservations'][0]['Instances'][0]
+            tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
+
+            # Extract Environment tag
+            environment = tags.get('Environment')
+            if environment:
+                self.print_status(f"Found Environment tag: {environment}", True, 2)
+
+            # Extract hostname from Name tag
+            # Format: cloudX-{env}-{hostname} | {username}
+            # We only need the first part before ' | '
+            hostname = None
+            name_tag = tags.get('Name', '')
+            if name_tag:
+                # Get the first part (before ' | ' if present)
+                ssh_hostname = name_tag.split(' | ')[0].strip()
+
+                # Parse cloudX-{env}-{hostname} or cloudx-{env}-{hostname}
+                match = re.match(r'^cloud[xX]-([^-]+)-(.+)$', ssh_hostname)
+                if match:
+                    hostname = match.group(2)
+                    self.print_status(f"Found hostname from Name tag: {hostname}", True, 2)
+                else:
+                    self.print_status(f"Name tag '{name_tag}' does not match cloudX-{{env}}-{{hostname}} format", None, 2)
+
+            return environment, hostname
+
+        except ClientError as e:
+            self.print_status(f"Error fetching instance tags: {e.response['Error']['Message']}", False, 2)
+            return None, None
+        except Exception as e:
+            self.print_status(f"Error fetching instance tags: {str(e)}", False, 2)
+            return None, None
     
     def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str = None,
                  ssh_dir: str = None, aws_env: str = None, use_1password: str = None, instance_id: str = None,

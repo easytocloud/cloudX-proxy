@@ -182,10 +182,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         if not setup.setup_ssh_key():
             sys.exit(1)
         
-        # Get environment and instance details
-        cloudx_env = setup.prompt("Enter environment", getattr(setup, 'default_env', None))
-
-        # Use the --instance parameter if provided, otherwise prompt
+        # Get instance ID first, then fetch tags to auto-populate environment and hostname
         instance_id = instance or setup.prompt("Enter EC2 instance ID (e.g., i-0123456789abcdef0)")
 
         # Validate instance ID format
@@ -207,13 +204,21 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             )
             sys.exit(1)
 
-        # Use --hostname if provided, otherwise generate default based on instance ID in non-interactive mode
+        # Fetch instance tags to get environment and hostname defaults
+        setup.print_status("Fetching instance tags...", None, 2)
+        tag_env, tag_hostname = setup.get_instance_tags(instance_id)
+
+        # Use environment from tag, fall back to AWS user default, or prompt
+        env_default = tag_env or getattr(setup, 'default_env', None)
+        cloudx_env = setup.prompt("Enter environment", env_default)
+
+        # Use --hostname if provided, otherwise use tag-based default
         if hostname:
             # If hostname is explicitly provided, use it directly
             setup.print_status(f"Using provided hostname: {hostname}", True, 2)
         else:
-            # Generate default hostname based on instance ID for non-interactive mode
-            hostname_default = f"instance-{instance_id[-7:]}" if non_interactive else None
+            # Use hostname from tag, or generate default based on instance ID for non-interactive mode
+            hostname_default = tag_hostname or (f"instance-{instance_id[-7:]}" if non_interactive else None)
             hostname = setup.prompt("Enter hostname for the instance", hostname_default)
         
         # Set up SSH config
