@@ -413,7 +413,7 @@ def migrate(target_dir: str, dry_run: bool):
         sys.exit(1)
 
 @cli.command()
-@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/cloudX/config)')
+@click.option('--ssh-config', default=None, help='SSH config file to use')
 @click.option('--dry-run', is_flag=True, help='Preview cleanup without executing')
 def cleanup(ssh_config: str, dry_run: bool):
     """Clean up and reorganize SSH configuration file.
@@ -422,6 +422,12 @@ def cleanup(ssh_config: str, dry_run: bool):
     - Removes duplicate environment and host entries
     - Reorganizes the config with proper structure and ASCII banners
     - Writes the file completely fresh (full rewrite)
+    - Auto-detects SSH config location
+
+    SSH config location is auto-detected:
+    - Uses ~/.ssh/cloudX/config if ~/.ssh/cloudX exists
+    - Falls back to ~/.ssh/vscode/config if ~/.ssh/vscode exists
+    - Defaults to ~/.ssh/cloudX/config otherwise
 
     \b
     Example usage:
@@ -431,6 +437,11 @@ def cleanup(ssh_config: str, dry_run: bool):
     cloudx-proxy cleanup --dry-run
     """
     try:
+        # Auto-detect SSH config location if not provided
+        if not ssh_config:
+            default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+            ssh_config = f"{detected_dir}/config"
+
         setup = CloudXSetup(ssh_config=ssh_config, dry_run=dry_run)
 
         if setup.cleanup_config():
