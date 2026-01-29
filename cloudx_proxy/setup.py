@@ -652,32 +652,51 @@ class CloudXSetup:
     def _build_proxy_command(self) -> str:
         """Build the ProxyCommand with appropriate parameters.
 
+        Suppresses redundant flags that match auto-detected defaults to keep
+        the SSH config clean. The connect command will auto-detect these values
+        if not provided. Environment-specific flags (like --aws-env) are always
+        preserved.
+
         Returns:
             str: The complete ProxyCommand string
         """
         # Use the same case as ssh_host_prefix for the proxy command
         # If prefix is "cloudX", use "cloudX-proxy"; if "cloudx", use "cloudx-proxy"
-        proxy_tool_name = self.ssh_host_prefix.replace(self.ssh_host_prefix.split('-')[0], "cloud" + self.ssh_host_prefix[5]) if len(self.ssh_host_prefix) > 5 else self.ssh_host_prefix
-        # Simpler: extract casing from ssh_host_prefix (e.g., "cloudX" or "cloudx")
         prefix_base = self.ssh_host_prefix.split('-')[0] if '-' in self.ssh_host_prefix else self.ssh_host_prefix
         proxy_command = f"uvx {prefix_base}-proxy connect %h %p"
-        
-        # Always include profile and ssh-key to ensure connect has all information
-        proxy_command += f" --profile {self.profile}"
-        
+
+        # Always include aws-env if specified (environment-specific, cannot be auto-detected)
         if self.aws_env:
             proxy_command += f" --aws-env {self.aws_env}"
-            
-        proxy_command += f" --ssh-key {self.ssh_key}"
-        
-        # Always include ssh-dir or ssh-config
-        # If the config file is standard (ssh_dir/config), use ssh-dir
-        if self.ssh_config_file == self.ssh_dir / "config":
-            proxy_command += f" --ssh-dir {self.ssh_dir}"
+
+        # Determine what the auto-detected defaults would be for this environment
+        # Default profile and ssh-key based on directory: cloudX > vscode > cloudX
+        cloudx_dir = Path(self.home_dir) / ".ssh" / "cloudX"
+        vscode_dir = Path(self.home_dir) / ".ssh" / "vscode"
+
+        if cloudx_dir.exists():
+            default_profile, default_ssh_key = "cloudX", "cloudX"
+        elif vscode_dir.exists():
+            default_profile, default_ssh_key = "vscode", "vscode"
         else:
-            # Non-standard config file location, use ssh-config
+            default_profile, default_ssh_key = "cloudX", "cloudX"
+
+        # Only include profile if it differs from the auto-detected default
+        if self.profile != default_profile:
+            proxy_command += f" --profile {self.profile}"
+
+        # Only include ssh-key if it differs from the auto-detected default
+        if self.ssh_key != default_ssh_key:
+            proxy_command += f" --ssh-key {self.ssh_key}"
+
+        # Only include ssh-dir if it's non-standard (not ~/.ssh/cloudX or ~/.ssh/vscode)
+        standard_cloudx = cloudx_dir / "config"
+        standard_vscode = vscode_dir / "config"
+
+        if self.ssh_config_file not in (standard_cloudx, standard_vscode):
+            # Non-standard config file location, include ssh-config
             proxy_command += f" --ssh-config {self.ssh_config_file}"
-            
+
         return proxy_command
         
     def _build_auth_config(self) -> str:
@@ -1131,6 +1150,7 @@ class CloudXSetup:
 
         Reads the entire config file, removes duplicates, reorganizes with
         proper structure, and writes back completely fresh (full rewrite).
+        Also rebuilds ProxyCommand to remove unnecessary default flags.
 
         Returns:
             bool: True if cleanup was successful
@@ -1161,6 +1181,35 @@ class CloudXSetup:
             # Parse existing config
             self.print_status("Parsing SSH config...", None, 2)
             parsed = self._parse_ssh_config(current_config)
+
+            # Optimize ProxyCommand in environment patterns to remove redundant flags
+            for env_name in parsed['environments'].keys():
+                # Get existing environment lines
+                env_lines = parsed['environments'][env_name]['lines']
+
+                # Find and rebuild the ProxyCommand line to remove unnecessary default flags
+                new_lines = []
+                for line in env_lines:
+                    if line.strip().startswith('ProxyCommand'):
+                        # Extract aws-env from the existing ProxyCommand if present
+                        aws_env = None
+                        if '--aws-env' in line:
+                            import re
+                            match = re.search(r'--aws-env\s+(\S+)', line)
+                            if match:
+                                aws_env = match.group(1)
+
+                        # Temporarily set aws_env for ProxyCommand building
+                        original_aws_env = self.aws_env
+                        self.aws_env = aws_env
+                        optimized_command = self._build_proxy_command()
+                        self.aws_env = original_aws_env
+
+                        new_lines.append(f"    ProxyCommand {optimized_command}")
+                    else:
+                        new_lines.append(line)
+
+                parsed['environments'][env_name]['lines'] = new_lines
 
             # Reorganize with proper structure
             self.print_status("Reorganizing configuration...", None, 2)
