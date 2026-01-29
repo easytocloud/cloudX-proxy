@@ -682,7 +682,7 @@ class CloudXSetup:
         
     def _build_auth_config(self) -> str:
         """Build the authentication configuration block.
-        
+
         Returns:
             str: SSH config authentication section
         """
@@ -690,15 +690,14 @@ class CloudXSetup:
             # When using 1Password:
             # 1. Set IdentityAgent to the 1Password socket (literal tilde for SSH compatibility)
             # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search
-            # 3. Set IdentitiesOnly to yes to avoid using ssh-agent keys
+            # (IdentitiesOnly is now set globally for all cloudX hosts)
             return """    IdentityAgent ~/.1password/agent.sock
     IdentityFile {}.pub
-    IdentitiesOnly yes
 """.format(self.ssh_key_file)
         else:
             # Standard SSH key configuration
+            # (IdentitiesOnly is now set globally for all cloudX hosts)
             return f"""    IdentityFile {self.ssh_key_file}
-    IdentitiesOnly yes
 """
 
     def _get_timestamp(self) -> str:
@@ -945,6 +944,7 @@ class CloudXSetup:
         config = f"""Host {self.ssh_host_prefix}-*
     User ec2-user
     TCPKeepAlive yes
+    IdentitiesOnly yes
 """
 
         # Add SSH multiplexing configuration
