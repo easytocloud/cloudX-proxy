@@ -736,84 +736,95 @@ class CloudXSetup:
                 break
             i += 1
 
-        # Parse sections - skip blank lines and banners
-        current_env = None
-        current_lines = []
+        # First pass: extract all Host entries and their properties
+        host_entries = {}  # hostname -> config_lines
+        env_patterns = {}  # env_pattern -> config_lines
+        current_host = None
+        current_config = []
+        global_config = None
 
-        while i < len(lines):
-            line = lines[i]
-
-            # Skip banner lines
-            if line.strip().startswith('# =='):
-                i += 1
+        for line in lines[i:]:
+            # Skip all comment lines and banners
+            if line.strip().startswith('#'):
                 continue
 
-            # Skip old metadata comment lines
-            if line.strip().startswith('# Created by cloudX-proxy') or \
-               line.strip().startswith('# Configuration type:'):
-                i += 1
-                continue
-
-            # Skip blank lines between sections
+            # Skip empty lines unless we're collecting config
             if not line.strip():
-                if current_lines and current_env is not None:
-                    current_lines.append(line)
-                i += 1
+                if current_host and current_config:
+                    current_config.append(line)
                 continue
 
-            # Host pattern line
+            # Host line
             if line.startswith('Host '):
+                # Save previous host if exists
+                if current_host:
+                    if current_host.endswith('*'):
+                        env_patterns[current_host] = current_config
+                    else:
+                        host_entries[current_host] = current_config
+                    current_config = []
+
                 host_pattern = line.replace('Host ', '').strip()
 
                 # Global section
                 if host_pattern == f"{self.ssh_host_prefix}-*":
-                    if current_env is not None and current_lines:
-                        # Save previous environment
-                        result['environments'][current_env] = {
-                            'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
-                            'lines': current_lines
-                        }
-                    current_env = 'GLOBAL'
-                    current_lines = [line]
-
-                # Environment pattern
-                elif re.match(rf'{re.escape(self.ssh_host_prefix)}-\w+-\*$', host_pattern):
-                    if current_env and current_lines:
-                        # Save previous section
-                        if current_env == 'GLOBAL':
-                            result['global'] = '\n'.join(current_lines).strip()
-                        else:
-                            result['environments'][current_env] = {
-                                'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
-                                'lines': current_lines
-                            }
-
-                    env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-\*', host_pattern)
-                    if env_match:
-                        current_env = env_match.group(1)
-                        current_lines = [line]
-
-                # Host entry
+                    global_config = [line]
+                    current_host = None
                 else:
-                    if current_lines:
-                        current_lines.append(line)
-
-            # Config content line
+                    current_host = host_pattern
+                    current_config = [line]
+            # Config content
             else:
-                if current_lines:
-                    current_lines.append(line)
+                if current_host:
+                    current_config.append(line)
+                elif global_config is not None:
+                    global_config.append(line)
 
-            i += 1
-
-        # Save last section
-        if current_env and current_lines:
-            if current_env == 'GLOBAL':
-                result['global'] = '\n'.join(current_lines).strip()
+        # Save last entry
+        if current_host:
+            if current_host.endswith('*'):
+                env_patterns[current_host] = current_config
             else:
-                result['environments'][current_env] = {
-                    'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
-                    'lines': current_lines
+                host_entries[current_host] = current_config
+
+        # Second pass: organize environment patterns and host entries
+        seen_hosts = set()  # Track seen hosts to avoid duplicates
+
+        # First, add all environment patterns
+        for env_pattern, config_lines in env_patterns.items():
+            env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-\*', env_pattern, re.IGNORECASE)
+            if env_match:
+                env_name = env_match.group(1).lower()  # Normalize to lowercase
+                result['environments'][env_name] = {
+                    'pattern': env_pattern,
+                    'lines': config_lines
                 }
+
+        # Then, add host entries to their environments
+        for host_key, config_lines in host_entries.items():
+            # Extract environment from hostname
+            env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-', host_key, re.IGNORECASE)
+            if env_match:
+                env_name = env_match.group(1).lower()  # Normalize to lowercase
+
+                # Skip duplicates
+                if host_key in seen_hosts:
+                    continue
+                seen_hosts.add(host_key)
+
+                # Create environment if not exists (shouldn't happen, but handle it)
+                if env_name not in result['environments']:
+                    result['environments'][env_name] = {
+                        'pattern': f"{self.ssh_host_prefix}-{env_name}-*",
+                        'lines': [f"Host {self.ssh_host_prefix}-{env_name}-*"]
+                    }
+
+                # Add host entry
+                result['environments'][env_name]['lines'].extend(config_lines)
+
+        # Store global config
+        if global_config:
+            result['global'] = '\n'.join(global_config).strip()
 
         return result
 
