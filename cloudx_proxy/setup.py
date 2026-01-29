@@ -1270,6 +1270,15 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
         
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would migrate from {vscode_dir} to {target_dir}")
+            self.print_status(f"[DRY RUN] Would update paths in {target_dir}/config:", None, 2)
+
+            # Show what would be replaced
+            old_dir_name = vscode_dir.name
+            new_dir_name = target_dir.name
+            self.print_status(f"  - Replace /{old_dir_name}/ with /{new_dir_name}/", None, 3)
+            self.print_status(f"  - Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 3)
+            self.print_status(f"  - Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 3)
+
             self.print_status(f"[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
             return True
             
@@ -1286,40 +1295,74 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
             self.print_status(f"Renaming {vscode_dir} to {target_dir}...", None, 2)
             vscode_dir.rename(target_dir)
             self.print_status("Directory renamed successfully", True, 2)
-            
+
+            # Update config file content to reflect new paths
+            config_file = target_dir / "config"
+            if config_file.exists():
+                self.print_status(f"Updating paths in {config_file}...", None, 2)
+                config_content = config_file.read_text()
+                original_content = config_content
+
+                # Extract directory names
+                old_dir_name = vscode_dir.name
+                new_dir_name = target_dir.name
+
+                # Replace absolute paths: /Users/.../.ssh/vscode/ -> /Users/.../.ssh/cloudX/
+                expanded_vscode_path = str(vscode_dir)
+                expanded_target_path = str(target_dir)
+                config_content = config_content.replace(expanded_vscode_path + "/", expanded_target_path + "/")
+
+                # Replace tilde paths: ~/.ssh/vscode -> ~/.ssh/cloudX
+                config_content = config_content.replace(f"~/.ssh/{old_dir_name}", f"~/.ssh/{new_dir_name}")
+
+                # Replace SSH key file references: ~/.ssh/vscode/vscode -> ~/.ssh/cloudX/cloudX
+                config_content = config_content.replace(f"~/.ssh/{old_dir_name}/{old_dir_name}", f"~/.ssh/{new_dir_name}/{new_dir_name}")
+
+                # Replace SSH key parameter in ProxyCommand: --ssh-key vscode -> --ssh-key cloudX
+                config_content = config_content.replace(f"--ssh-key {old_dir_name}", f"--ssh-key {new_dir_name}")
+
+                # Replace SSH dir parameter in ProxyCommand: --ssh-dir ~/.ssh/vscode -> --ssh-dir ~/.ssh/cloudX
+                config_content = config_content.replace(f"--ssh-dir {expanded_vscode_path}", f"--ssh-dir {expanded_target_path}")
+
+                # Only write if content changed
+                if config_content != original_content:
+                    config_file.write_text(config_content)
+                    config_file.chmod(0o600)
+                    self.print_status("Updated config file paths", True, 2)
+
             # Update system SSH config
             system_config_path = Path(self.home_dir) / ".ssh" / "config"
             if system_config_path.exists():
                 content = system_config_path.read_text()
-                
+
                 # Remove old include
                 lines = content.splitlines()
                 new_lines = []
                 include_removed = False
-                
+
                 for line in lines:
                     if "Include" in line and "vscode/config" in line:
                         include_removed = True
                         continue
                     new_lines.append(line)
-                
+
                 # Add new include
                 new_include = f"Include {target_dir}/config"
                 if new_include not in content:
                     new_lines.append(new_include)
-                    
+
                 system_config_path.write_text("\n".join(new_lines) + "\n")
-                
+
                 if include_removed:
                     self.print_status("Updated ~/.ssh/config: Removed old Include, added new Include", True, 2)
                 else:
                     self.print_status("Updated ~/.ssh/config: Added new Include", True, 2)
-            
+
             # Update internal state
             self.ssh_dir = target_dir
             self.ssh_config_file = self.ssh_dir / "config"
             self.ssh_key_file = self.ssh_dir / f"{self.ssh_key}"
-            
+
             return True
             
         except Exception as e:
