@@ -414,25 +414,31 @@ def migrate(target_dir: str, dry_run: bool):
 
 @cli.command()
 @click.option('--ssh-config', default=None, help='SSH config file to use')
+@click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--dry-run', is_flag=True, help='Preview cleanup without executing')
-def cleanup(ssh_config: str, dry_run: bool):
+def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
     """Clean up and reorganize SSH configuration file.
 
     This command:
     - Removes duplicate environment and host entries
     - Reorganizes the config with proper structure and ASCII banners
     - Writes the file completely fresh (full rewrite)
-    - Auto-detects SSH config location
+    - Auto-detects SSH config location and matching ssh-host-prefix
 
     SSH config location is auto-detected:
     - Uses ~/.ssh/cloudX/config if ~/.ssh/cloudX exists
     - Falls back to ~/.ssh/vscode/config if ~/.ssh/vscode exists
     - Defaults to ~/.ssh/cloudX/config otherwise
 
+    SSH host prefix is auto-detected from command name:
+    - If invoked as 'cloudX-proxy cleanup', uses 'cloudX' prefix
+    - If invoked as 'cloudx-proxy cleanup', uses 'cloudx' prefix
+
     \b
     Example usage:
     \b
     cloudx-proxy cleanup
+    cloudX-proxy cleanup
     cloudx-proxy cleanup --ssh-config ~/.ssh/cloudx/config
     cloudx-proxy cleanup --dry-run
     """
@@ -442,7 +448,15 @@ def cleanup(ssh_config: str, dry_run: bool):
             default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
             ssh_config = f"{detected_dir}/config"
 
-        setup = CloudXSetup(ssh_config=ssh_config, dry_run=dry_run)
+        # Determine default prefix based on command name if not provided
+        if not ssh_host_prefix:
+            cmd_name = os.path.basename(sys.argv[0])
+            if cmd_name == 'cloudX-proxy':
+                ssh_host_prefix = 'cloudX'
+            else:
+                ssh_host_prefix = 'cloudx'
+
+        setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
         if setup.cleanup_config():
             print("\n\033[92mCleanup completed successfully!\033[0m")
