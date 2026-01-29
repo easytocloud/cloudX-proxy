@@ -868,35 +868,38 @@ class CloudXSetup:
             lines.append("# ==============================================================================")
             lines.append("")
 
-            # Extract environment pattern from lines (first line should be Host pattern)
+            # Extract environment pattern and its config from lines
             env_pattern_line = None
-            config_lines = []
+            env_config_lines = []  # Config lines that belong to the pattern
             host_lines = []
             in_hosts = False
+            seen_pattern = False
 
             for line in env_data['lines']:
                 if line.startswith('Host ') and '*' in line:
                     # This is the environment pattern line
                     env_pattern_line = line
+                    seen_pattern = True
                 elif line.startswith('Host ') and '*' not in line:
-                    # This is a host entry
+                    # This is a host entry - stop collecting pattern config
                     in_hosts = True
                     host_lines.append(line)
                 elif in_hosts:
                     # Host entry content
                     host_lines.append(line)
-                elif line.strip() or not config_lines:
-                    # Config content (before hosts)
-                    config_lines.append(line)
+                elif seen_pattern and not in_hosts:
+                    # Config content that belongs to the environment pattern
+                    # (indented lines after Host pattern-*)
+                    env_config_lines.append(line)
 
             # Add environment pattern line
             if env_pattern_line:
                 lines.append(env_pattern_line)
             # Add environment config content (auth, ProxyCommand, etc)
-            for line in config_lines[1:] if config_lines else []:
-                if line.strip():
+            for line in env_config_lines:
+                if line.strip():  # Skip empty lines but preserve indentation
                     lines.append(line)
-            if env_pattern_line or config_lines:
+            if env_pattern_line or env_config_lines:
                 lines.append("")
 
             # Add host entries sorted by hostname
