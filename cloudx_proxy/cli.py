@@ -9,6 +9,26 @@ from .setup import CloudXSetup
 from .colors import header, success, error as color_error, info, format_instance_id, format_hostname, format_command, secondary
 
 
+def detect_ssh_defaults() -> tuple:
+    """Detect SSH configuration defaults based on directory existence.
+
+    Returns:
+        tuple: (profile, ssh_key, detected_ssh_dir_display)
+        - If ~/.ssh/cloudX exists: ("cloudX", "cloudX", "~/.ssh/cloudX")
+        - Elif ~/.ssh/vscode exists: ("vscode", "vscode", "~/.ssh/vscode")
+        - Else: ("cloudX", "cloudX", "~/.ssh/cloudX") [new default]
+    """
+    cloudx_dir = Path(os.path.expanduser("~/.ssh/cloudX"))
+    vscode_dir = Path(os.path.expanduser("~/.ssh/vscode"))
+
+    if cloudx_dir.exists():
+        return "cloudX", "cloudX", "~/.ssh/cloudX"
+    elif vscode_dir.exists():
+        return "vscode", "vscode", "~/.ssh/vscode"
+    else:
+        return "cloudX", "cloudX", "~/.ssh/cloudX"
+
+
 class OptionalValueOption(click.Option):
     """Click option that allows an optional value (e.g., --flag or --flag value)."""
 
@@ -54,10 +74,10 @@ Main commands:
 @cli.command()
 @click.argument('instance_id')
 @click.argument('port', type=int, default=22)
-@click.option('--profile', default='vscode', help='AWS profile to use (default: vscode)')
+@click.option('--profile', default=None, help='AWS profile to use')
 @click.option('--region', help='AWS region (default: from profile, or eu-west-1 if not set)')
-@click.option('--ssh-key', default='vscode', help='SSH key name to use (default: vscode)')
-@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/vscode/config)')
+@click.option('--ssh-key', default=None, help='SSH key name to use')
+@click.option('--ssh-config', help='SSH config file to use')
 @click.option('--ssh-dir', help='Directory for SSH keys and config')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option('--dry-run', is_flag=True, help='Preview connection workflow without executing')
@@ -65,6 +85,11 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     """Connect to an EC2 instance via SSM.
 
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
+
+    SSH config location is auto-detected:
+    - Uses ~/.ssh/cloudX if it exists (profile=cloudX, ssh-key=cloudX)
+    - Falls back to ~/.ssh/vscode if it exists (profile=vscode, ssh-key=vscode)
+    - Defaults to ~/.ssh/cloudX otherwise
 
     \b
     Example usage:
@@ -75,6 +100,15 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
     try:
+        # Auto-detect defaults from config directory
+        default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+
+        # Use detected defaults if options not provided
+        if not profile:
+            profile = default_profile
+        if not ssh_key:
+            ssh_key = default_ssh_key
+
         # Validate instance ID format
         if not CloudXSetup.validate_instance_id(instance_id):
             print(color_error(f"Error: Invalid EC2 instance ID format: {instance_id}"), file=sys.stderr)
@@ -93,12 +127,12 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             aws_env=aws_env,
             dry_run=dry_run
         )
-        
+
         client.log(f"cloudx-proxy@{__version__} Connecting to instance {instance_id} on port {port}...")
-        
+
         if not client.connect():
             sys.exit(1)
-            
+
     except Exception as e:
         print(color_error(f"Error: {str(e)}"), file=sys.stderr)
         sys.exit(1)
