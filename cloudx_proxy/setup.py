@@ -1162,46 +1162,10 @@ class CloudXSetup:
             Tuple[bool, str]: Success flag, Updated configuration
         """
         pattern = f"{self.ssh_host_prefix}-{cloudx_env}-*"
-        if self._check_config_exists(pattern, current_config):
-            self.print_status(f"Found existing config for {pattern}", True, 2)
-            
-            # Option to override if needed
-            choice = self.prompt(
-                "Would you like to \n"
-                "  1: override the existing environment config\n"
-                "  2: keep existing environment config?\n"
-                "Select an option",
-                "2"
-            )
-            
-            if choice == "1":
-                # Remove existing config for this environment
-                self.print_status("Removing existing environment configuration", None, 2)
-                env_config, remaining_config = self._extract_host_config(pattern, current_config)
-                
-                # Create new environment config
-                env_config = self._build_environment_config(cloudx_env)
-                
-                # Append new environment config to remaining config
-                updated_config = remaining_config
-                if updated_config and not updated_config.endswith('\n'):
-                    updated_config += '\n'
-                updated_config += env_config
-                
-                return True, updated_config
-            
-            return True, current_config
-        
-        self.print_status(f"Creating environment config for {pattern}", None, 2)
-        env_config = self._build_environment_config(cloudx_env)
-        
-        # Append environment config to current config
-        updated_config = current_config
-        if updated_config and not updated_config.endswith('\n'):
-            updated_config += '\n'
-        updated_config += env_config
-        
-        return True, updated_config
+        # Environment config is now handled by _add_host_entry which parses and reorganizes
+        # the entire config file. No need to prompt here.
+        self.print_status(f"Environment config for {pattern} will be added/updated via host entries", None, 2)
+        return True, current_config
 
     def _ensure_control_dir(self) -> bool:
         """Create SSH control directory with proper permissions.
