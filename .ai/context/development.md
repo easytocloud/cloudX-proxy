@@ -30,6 +30,21 @@ python -m build
 uv pip install dist/cloudX_proxy-*.whl
 ```
 
+## Naming Convention: cloudX vs cloudx
+
+The tool uses **`cloudX` (with uppercase X)** as the standard spelling to align with the product branding. This is used in:
+- Command name: `cloudX-proxy`
+- SSH host prefix: `cloudX-dev-*`, `cloudX-prod-*`
+- Directory names: `~/.ssh/cloudX/`
+- AWS profiles and SSH keys: default name is `cloudX`
+
+**Note:** The SSH host prefix spelling adapts based on how the command is invoked:
+- If invoked as `cloudX-proxy setup`, SSH hosts will use `cloudX-dev-myserver` format (uppercase)
+- If invoked as `cloudx-proxy setup`, SSH hosts will use `cloudx-dev-myserver` format (lowercase)
+- Users can override with `--ssh-host-prefix` flag
+
+**Recommendation:** Use `cloudX` (uppercase X) in all documentation, examples, and user-facing content to maintain consistent branding.
+
 ## Running the Application
 
 The application is designed to be run via `uvx` (from the `uv` package manager) or `uv run` during development:

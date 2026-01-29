@@ -54,6 +54,18 @@ Using AWS Systems Manager Session Manager, it eliminates the need for direct SSH
 
 ---
 
+## Naming Convention: cloudX
+
+The tool uses **`cloudX` (with uppercase X)** as the standard spelling throughout documentation, configuration, and examples:
+- Command: `cloudX-proxy`
+- SSH hosts: `cloudX-dev-myserver`, `cloudX-prod-api`
+- Directories: `~/.ssh/cloudX/`
+- Default profiles and keys: `cloudX`
+
+All documentation and examples use this convention. If you see different casing (like `cloudx`), it may be from legacy code or package names in lower case (e.g., `cloudx-proxy` on PyPI for compatibility). **We recommend using `cloudX` (uppercase X) in all your configuration and examples to maintain consistent branding.**
+
+---
+
 ## Prerequisites
 
 1. **Python 3.9+** - Required for cloudx-proxy and uv package manager
