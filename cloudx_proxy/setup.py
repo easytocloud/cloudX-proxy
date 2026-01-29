@@ -698,31 +698,220 @@ class CloudXSetup:
 
     def _get_timestamp(self) -> str:
         """Get a formatted timestamp for configuration comments.
-        
+
         Returns:
             str: Formatted timestamp
         """
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    def _parse_ssh_config(self, config_content: str) -> dict:
+        """Parse SSH config into structured sections.
+
+        Returns a dict with:
+        - 'version': Version header line (if present)
+        - 'global': Global Host cloudX-* section
+        - 'environments': Dict with environment name -> {pattern, lines}
+
+        Args:
+            config_content: SSH config file content
+
+        Returns:
+            dict: Parsed configuration structure
+        """
+        result = {
+            'version': None,
+            'global': None,
+            'environments': {}
+        }
+
+        lines = config_content.split('\n')
+        i = 0
+
+        # Extract version header
+        while i < len(lines) and lines[i].strip().startswith('#'):
+            if 'Managed by cloudX-proxy' in lines[i] or 'SSH Configuration' in lines[i]:
+                result['version'] = lines[i].strip()
+                i += 1
+                break
+            i += 1
+
+        # Parse sections - skip blank lines and banners
+        current_env = None
+        current_lines = []
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Skip banner lines
+            if line.strip().startswith('# =='):
+                i += 1
+                continue
+
+            # Skip blank lines between sections
+            if not line.strip():
+                if current_lines and current_env is not None:
+                    current_lines.append(line)
+                i += 1
+                continue
+
+            # Host pattern line
+            if line.startswith('Host '):
+                host_pattern = line.replace('Host ', '').strip()
+
+                # Global section
+                if host_pattern == f"{self.ssh_host_prefix}-*":
+                    if current_env is not None and current_lines:
+                        # Save previous environment
+                        result['environments'][current_env] = {
+                            'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
+                            'lines': current_lines
+                        }
+                    current_env = 'GLOBAL'
+                    current_lines = [line]
+
+                # Environment pattern
+                elif re.match(rf'{re.escape(self.ssh_host_prefix)}-\w+-\*$', host_pattern):
+                    if current_env and current_lines:
+                        # Save previous section
+                        if current_env == 'GLOBAL':
+                            result['global'] = '\n'.join(current_lines).strip()
+                        else:
+                            result['environments'][current_env] = {
+                                'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
+                                'lines': current_lines
+                            }
+
+                    env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-\*', host_pattern)
+                    if env_match:
+                        current_env = env_match.group(1)
+                        current_lines = [line]
+
+                # Host entry
+                else:
+                    if current_lines:
+                        current_lines.append(line)
+
+            # Config content line
+            else:
+                if current_lines:
+                    current_lines.append(line)
+
+            i += 1
+
+        # Save last section
+        if current_env and current_lines:
+            if current_env == 'GLOBAL':
+                result['global'] = '\n'.join(current_lines).strip()
+            else:
+                result['environments'][current_env] = {
+                    'pattern': f"{self.ssh_host_prefix}-{current_env}-*",
+                    'lines': current_lines
+                }
+
+        return result
+
+    def _organize_ssh_config(self, global_config: str, environments: dict) -> str:
+        """Organize SSH config with proper structure and banners.
+
+        Args:
+            global_config: Global configuration block
+            environments: Dict of environment_name -> {pattern, lines}
+
+        Returns:
+            str: Organized SSH config content
+        """
+        version = self._get_version()
+        lines = [f"# SSH Configuration - Managed by cloudX-proxy v{version}", ""]
+
+        # Add global section with banner
+        if global_config:
+            lines.append("# ==============================================================================")
+            lines.append("#  GLOBAL")
+            lines.append("# ==============================================================================")
+            lines.append("")
+            lines.extend(global_config.split('\n'))
+            lines.append("")
+
+        # Add environment sections in alphabetical order
+        for env_name in sorted(environments.keys()):
+            env_data = environments[env_name]
+            lines.append("# ==============================================================================")
+            lines.append(f"#  {env_name.upper()}")
+            lines.append("# ==============================================================================")
+            lines.append("")
+
+            # Extract environment pattern from lines (first line should be Host pattern)
+            env_pattern_line = None
+            config_lines = []
+            host_lines = []
+            in_hosts = False
+
+            for line in env_data['lines']:
+                if line.startswith('Host ') and '*' in line:
+                    # This is the environment pattern line
+                    env_pattern_line = line
+                elif line.startswith('Host ') and '*' not in line:
+                    # This is a host entry
+                    in_hosts = True
+                    host_lines.append(line)
+                elif in_hosts:
+                    # Host entry content
+                    host_lines.append(line)
+                elif line.strip() or not config_lines:
+                    # Config content (before hosts)
+                    config_lines.append(line)
+
+            # Add environment pattern line
+            if env_pattern_line:
+                lines.append(env_pattern_line)
+            # Add environment config content (auth, ProxyCommand, etc)
+            for line in config_lines[1:] if config_lines else []:
+                if line.strip():
+                    lines.append(line)
+            if env_pattern_line or config_lines:
+                lines.append("")
+
+            # Add host entries sorted by hostname
+            if host_lines:
+                sorted_hosts = []
+                current_host = []
+                for line in host_lines:
+                    if line.startswith('Host ') and current_host:
+                        sorted_hosts.append('\n'.join(current_host))
+                        current_host = [line]
+                    else:
+                        current_host.append(line)
+                if current_host:
+                    sorted_hosts.append('\n'.join(current_host))
+
+                # Sort by hostname (first line)
+                sorted_hosts.sort(key=lambda x: x.split('\n')[0])
+
+                for host in sorted_hosts:
+                    lines.append(host)
+                lines.append("")
+
+        # Join and clean up
+        result = '\n'.join(lines)
+        # Remove duplicate empty lines
+        while '\n\n\n' in result:
+            result = result.replace('\n\n\n', '\n\n')
+
+        return result.rstrip() + '\n'
+
     def _build_generic_config(self) -> str:
         """Build a generic configuration block with common settings for all environments.
-        
+
         Returns:
             str: Generic configuration block
         """
-        version = self._get_version()
-        timestamp = self._get_timestamp()
-        
-        # Start with metadata comment
-        config = f"""
-# Created by cloudX-proxy v{version} on {timestamp}
-# Configuration type: generic
-Host {self.ssh_host_prefix}-*
+        # No metadata comments - handled by _organize_ssh_config
+        config = f"""Host {self.ssh_host_prefix}-*
     User ec2-user
     TCPKeepAlive yes
 """
-        
+
         # Add SSH multiplexing configuration
         # On Windows, the default SSH client doesn't support Control* options,
         # so we comment them out by default. Users with alternative SSH clients
@@ -730,63 +919,51 @@ Host {self.ssh_host_prefix}-*
         control_path = "~/.ssh/control/%r@%h:%p"
         is_windows = platform.system() == 'Windows'
         comment_prefix = "# " if is_windows else ""
-        
+
         config += f"""    {comment_prefix}ControlMaster auto
     {comment_prefix}ControlPath {control_path}
     {comment_prefix}ControlPersist 4h
 """
-        
+
         return config
         
     def _build_environment_config(self, cloudx_env: str) -> str:
         """Build an environment-specific configuration block.
-        
+
         Args:
             cloudx_env: CloudX environment
-            
+
         Returns:
             str: Environment configuration block
         """
-        version = self._get_version()
-        timestamp = self._get_timestamp()
-        
-        # Start with metadata comment
-        config = f"""
-# Created by cloudX-proxy v{version} on {timestamp}
-# Configuration type: environment
-Host {self.ssh_host_prefix}-{cloudx_env}-*
+        # No metadata comments - handled by _organize_ssh_config
+        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-*
 """
         # Add authentication configuration
         config += self._build_auth_config()
-        
+
         # Add ProxyCommand
         config += f"""    ProxyCommand {self._build_proxy_command()}
 """
-        
+
         return config
         
     def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str) -> str:
         """Build a host-specific configuration block.
-        
+
         Args:
             cloudx_env: CloudX environment
             hostname: Hostname for the instance
             instance_id: EC2 instance ID
-            
+
         Returns:
             str: Host configuration block
         """
-        version = self._get_version()
-        timestamp = self._get_timestamp()
-        
-        # Start with metadata comment
-        config = f"""
-# Created by cloudX-proxy v{version} on {timestamp}
-# Configuration type: host
-Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
+        # No metadata comments - handled by _organize_ssh_config
+        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
     HostName {instance_id}
 """
-        
+
         return config
     
     def _check_config_exists(self, pattern: str, current_config: str) -> bool:
@@ -831,48 +1008,79 @@ Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
         return "\n".join(host_config_lines), "\n".join(remaining_lines)
     
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
-        """Add settings to a specific host entry.
-        
+        """Add/update host entry and reorganize config file.
+
+        Parses the config, adds/updates the host entry, and reorganizes the file
+        with proper structure and banners.
+
         Args:
             cloudx_env: CloudX environment
             instance_id: EC2 instance ID
             hostname: Hostname for the instance
             current_config: Current SSH config content
-        
+
         Returns:
             bool: True if settings were added successfully
         """
         try:
-            # Check if host entry already exists
             host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-            if self._check_config_exists(host_pattern, current_config):
-                # Extract existing host configuration
-                host_config, remaining_config = self._extract_host_config(host_pattern, current_config)
-                
-                # Update host configuration
-                host_config = self._build_host_config(cloudx_env, hostname, instance_id)
-                
-                # Write updated config
-                with open(self.ssh_config_file, 'w') as f:
-                    f.write(remaining_config)
-                    f.write(host_config)
-                
-                self.print_status(f"Updated existing host entry for {host_pattern}", True, 2)
+            new_host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
+
+            # Parse existing config
+            parsed = self._parse_ssh_config(current_config)
+
+            # Ensure environment section exists
+            if cloudx_env not in parsed['environments']:
+                # Create new environment
+                env_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-*"
+                parsed['environments'][cloudx_env] = {
+                    'pattern': env_pattern,
+                    'lines': [f"Host {env_pattern}"] + self._build_environment_config(cloudx_env).split('\n')[1:]
+                }
+                self.print_status(f"Created new environment section for '{cloudx_env}'", None, 2)
             else:
-                # Generate new host entry
-                host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
-                
-                # Append host entry
-                with open(self.ssh_config_file, 'a') as f:
-                    f.write(host_entry)
-                self.print_status(f"Added new host entry for {host_pattern}", True, 2)
-            
+                # Check if host entry exists and update if needed
+                env_lines = parsed['environments'][cloudx_env]['lines']
+                host_exists = any(host_pattern in line for line in env_lines if line.startswith('Host '))
+
+                if host_exists:
+                    # Remove old host entry
+                    new_lines = []
+                    skip_until_next_host = False
+                    for line in env_lines:
+                        if line.startswith('Host ') and host_pattern in line:
+                            skip_until_next_host = True
+                            continue
+                        if skip_until_next_host:
+                            if line.startswith('Host '):
+                                skip_until_next_host = False
+                            else:
+                                continue
+                        new_lines.append(line)
+                    parsed['environments'][cloudx_env]['lines'] = new_lines
+
+            # Add new host entry
+            parsed['environments'][cloudx_env]['lines'].extend(new_host_entry.split('\n'))
+
+            # Rebuild config with organization
+            organized_config = self._organize_ssh_config(
+                parsed['global'] or self._build_generic_config(),
+                parsed['environments']
+            )
+
+            # Write organized config
+            self.ssh_config_file.write_text(organized_config)
+
             # Set proper permissions on the config file
             if platform.system() != 'Windows':
                 import stat
-                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions (owner read/write)
-                self.print_status("Set config file permissions to 600", True, 2)
-                
+                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+
+            if self._check_config_exists(host_pattern, organized_config):
+                self.print_status(f"Updated host entry for {host_pattern}", True, 2)
+            else:
+                self.print_status(f"Added new host entry for {host_pattern}", True, 2)
+
             return True
 
         except Exception as e:
