@@ -47,6 +47,7 @@ Main commands:
   setup     - Configure AWS profile, SSH keys, and SSH configuration
   connect   - Connect to an EC2 instance via SSM
   list      - List configured SSH hosts
+  cleanup   - Clean up and reorganize SSH configuration
   migrate   - Migrate from legacy vscode directory to cloudX"""
     pass
 
@@ -359,20 +360,50 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
 @click.option('--dry-run', is_flag=True, help='Preview migration without executing')
 def migrate(target_dir: str, dry_run: bool):
     """Migrate from legacy vscode directory to cloudX.
-    
+
     This command moves the configuration from ~/.ssh/vscode to ~/.ssh/cloudX
     (or another specified directory) and updates ~/.ssh/config.
     """
     try:
         setup = CloudXSetup(dry_run=dry_run)
-        
+
         target_path = Path(os.path.expanduser(target_dir)) if target_dir else None
-        
+
         if setup.migrate_to_cloudx(target_path):
             print("\n\033[92mMigration completed successfully!\033[0m")
         else:
             sys.exit(1)
-            
+
+    except Exception as e:
+        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        sys.exit(1)
+
+@cli.command()
+@click.option('--ssh-config', help='SSH config file to use (default: ~/.ssh/cloudX/config)')
+@click.option('--dry-run', is_flag=True, help='Preview cleanup without executing')
+def cleanup(ssh_config: str, dry_run: bool):
+    """Clean up and reorganize SSH configuration file.
+
+    This command:
+    - Removes duplicate environment and host entries
+    - Reorganizes the config with proper structure and ASCII banners
+    - Writes the file completely fresh (full rewrite)
+
+    \b
+    Example usage:
+    \b
+    cloudx-proxy cleanup
+    cloudx-proxy cleanup --ssh-config ~/.ssh/cloudx/config
+    cloudx-proxy cleanup --dry-run
+    """
+    try:
+        setup = CloudXSetup(ssh_config=ssh_config, dry_run=dry_run)
+
+        if setup.cleanup_config():
+            print("\n\033[92mCleanup completed successfully!\033[0m")
+        else:
+            sys.exit(1)
+
     except Exception as e:
         print(color_error(f"Error: {str(e)}"), file=sys.stderr)
         sys.exit(1)

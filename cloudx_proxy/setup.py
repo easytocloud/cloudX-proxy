@@ -1125,7 +1125,65 @@ class CloudXSetup:
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
                 return True
             return False
-    
+
+    def cleanup_config(self) -> bool:
+        """Clean up and reorganize SSH configuration file.
+
+        Reads the entire config file, removes duplicates, reorganizes with
+        proper structure, and writes back completely fresh (full rewrite).
+
+        Returns:
+            bool: True if cleanup was successful
+        """
+        try:
+            if not self.ssh_config_file.exists():
+                self.print_status(f"SSH config file not found: {self.ssh_config_file}", False, 2)
+                return False
+
+            # Read current config
+            current_config = self.ssh_config_file.read_text()
+
+            # For dry-run, show what would be cleaned up
+            if self.dry_run:
+                self.print_status("Parsing SSH config...", None, 2)
+                parsed = self._parse_ssh_config(current_config)
+
+                # Count environments and hosts
+                total_hosts = sum(
+                    len([line for line in env_data['lines'] if line.startswith('Host ') and '*' not in line])
+                    for env_data in parsed['environments'].values()
+                )
+
+                self.print_status(f"[DRY RUN] Would reorganize {len(parsed['environments'])} environments", None, 2)
+                self.print_status(f"[DRY RUN] Would reorganize {total_hosts} host entries", None, 2)
+                return True
+
+            # Parse existing config
+            self.print_status("Parsing SSH config...", None, 2)
+            parsed = self._parse_ssh_config(current_config)
+
+            # Reorganize with proper structure
+            self.print_status("Reorganizing configuration...", None, 2)
+            organized_config = self._organize_ssh_config(
+                parsed['global'] or self._build_generic_config(),
+                parsed['environments']
+            )
+
+            # Write completely rewritten config
+            self.ssh_config_file.write_text(organized_config)
+
+            # Set proper permissions on the config file
+            if platform.system() != 'Windows':
+                import stat
+                self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
+
+            self.print_status(f"Cleanup completed and config reorganized", True, 2)
+            return True
+
+        except Exception as e:
+            self.print_status(f"Error during cleanup: {str(e)}", False, 2)
+            return False
+
     def _check_and_create_generic_config(self, current_config: str) -> Tuple[bool, str]:
         """Check if generic configuration exists and create it if needed.
         
