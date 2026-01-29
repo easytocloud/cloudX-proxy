@@ -651,11 +651,16 @@ class CloudXSetup:
     
     def _build_proxy_command(self) -> str:
         """Build the ProxyCommand with appropriate parameters.
-        
+
         Returns:
             str: The complete ProxyCommand string
         """
-        proxy_command = "uvx cloudx-proxy connect %h %p"
+        # Use the same case as ssh_host_prefix for the proxy command
+        # If prefix is "cloudX", use "cloudX-proxy"; if "cloudx", use "cloudx-proxy"
+        proxy_tool_name = self.ssh_host_prefix.replace(self.ssh_host_prefix.split('-')[0], "cloud" + self.ssh_host_prefix[5]) if len(self.ssh_host_prefix) > 5 else self.ssh_host_prefix
+        # Simpler: extract casing from ssh_host_prefix (e.g., "cloudX" or "cloudx")
+        prefix_base = self.ssh_host_prefix.split('-')[0] if '-' in self.ssh_host_prefix else self.ssh_host_prefix
+        proxy_command = f"uvx {prefix_base}-proxy connect %h %p"
         
         # Always include profile and ssh-key to ensure connect has all information
         proxy_command += f" --profile {self.profile}"
