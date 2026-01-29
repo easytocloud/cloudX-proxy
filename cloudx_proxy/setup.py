@@ -748,6 +748,12 @@ class CloudXSetup:
                 i += 1
                 continue
 
+            # Skip old metadata comment lines
+            if line.strip().startswith('# Created by cloudX-proxy') or \
+               line.strip().startswith('# Configuration type:'):
+                i += 1
+                continue
+
             # Skip blank lines between sections
             if not line.strip():
                 if current_lines and current_env is not None:
