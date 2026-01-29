@@ -744,8 +744,8 @@ class CloudXSetup:
         global_config = None
 
         for line in lines[i:]:
-            # Skip all comment lines and banners
-            if line.strip().startswith('#'):
+            # Skip standalone comment lines and banners (but keep inline comments on Host lines)
+            if line.strip().startswith('#') and not line.startswith('Host '):
                 continue
 
             # Skip empty lines unless we're collecting config
@@ -764,20 +764,30 @@ class CloudXSetup:
                         host_entries[current_host] = current_config
                     current_config = []
 
-                host_pattern = line.replace('Host ', '').strip()
+                # Preserve the full Host line (including inline comments after #)
+                current_host = line.replace('Host ', '', 1).strip()
+
+                # For pattern matching, extract just the hostname/pattern without comments
+                hostname_only = current_host.split('#')[0].strip()
 
                 # Global section
-                if host_pattern == f"{self.ssh_host_prefix}-*":
+                if hostname_only == f"{self.ssh_host_prefix}-*":
                     global_config = [line]
                     current_host = None
                 else:
-                    current_host = host_pattern
-                    current_config = [line]
+                    current_host = hostname_only  # Store without inline comment for dedup/matching
+                    current_config = [line]  # Store full line with comment
             # Config content
             else:
                 if current_host:
+                    # Strip inline comments from config directives (not Host lines)
+                    if '#' in line and not line.strip().startswith('#'):
+                        line = line.split('#')[0].rstrip()
                     current_config.append(line)
                 elif global_config is not None:
+                    # Strip inline comments from global config too
+                    if '#' in line and not line.strip().startswith('#'):
+                        line = line.split('#')[0].rstrip()
                     global_config.append(line)
 
         # Save last entry
