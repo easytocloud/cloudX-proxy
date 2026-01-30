@@ -1,3 +1,20 @@
+# [0.14.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.3...v0.14.0) (2026-01-29)
+
+
+### Bug Fixes
+
+* improve SSH config parser to handle messy/duplicate configs ([3921217](https://github.com/easytocloud/cloudX-proxy/commit/39212175db837854517fe4865226bc64b9300dac))
+* preserve environment pattern config (ProxyCommand, etc.) ([01a0c51](https://github.com/easytocloud/cloudX-proxy/commit/01a0c51c24eb832e3d5185ab361b2c4b9fe9d7d9))
+* remove old metadata comments when parsing SSH config ([c280a76](https://github.com/easytocloud/cloudX-proxy/commit/c280a76c61310b4c14e106d839bd2a002b08fa89))
+* update SSH config file content during migration ([d602d9e](https://github.com/easytocloud/cloudX-proxy/commit/d602d9e51768f921e34ee75d8bf09702cab3532d))
+
+
+### Features
+
+* match ProxyCommand casing to ssh_host_prefix ([04a93e3](https://github.com/easytocloud/cloudX-proxy/commit/04a93e3c8c4d693fb94fe306af0b69153f8ec1f5))
+* organize SSH config file with banners and sorted sections ([c7eb208](https://github.com/easytocloud/cloudX-proxy/commit/c7eb208e541fe836c4fa9e8b03f0e317c2928c0c))
+* preserve inline comments on Host lines only ([5d4f147](https://github.com/easytocloud/cloudX-proxy/commit/5d4f147b0a345b1f82aa4ab5d53434b8934460b0))
+
 ## [0.13.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.2...v0.13.3) (2026-01-24)
 
 
