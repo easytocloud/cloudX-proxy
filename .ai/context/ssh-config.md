@@ -283,3 +283,44 @@ def manipulate_ssh_config(config_path, new_entries):
 
     write_file(config_path, output)
 ```
+
+## Prefix Naming Convention
+
+cloudX-proxy supports two prefix naming conventions:
+- `cloudX` (uppercase X) - **preferred**
+- `cloudx` (lowercase x) - backward compatible
+
+### Command Name Determines Prefix
+
+The command name used (`cloudX-proxy` or `cloudx-proxy`) determines which prefix is used in generated configurations:
+
+| Command | Host Patterns | ProxyCommand |
+|---------|---------------|--------------|
+| `cloudX-proxy` | `Host cloudX-*` | `uvx cloudX-proxy connect` |
+| `cloudx-proxy` | `Host cloudx-*` | `uvx cloudx-proxy connect` |
+
+### Cleanup Normalizes Prefix
+
+The `cleanup` command normalizes all existing entries to match the invoked command:
+
+```bash
+# Convert all entries to cloudX (preferred)
+uvx cloudX-proxy cleanup
+
+# Convert all entries to cloudx
+uvx cloudx-proxy cleanup
+```
+
+This allows users to easily migrate between naming conventions. The normalization affects:
+- Global pattern: `Host cloudX-*` or `Host cloudx-*`
+- Environment patterns: `Host cloudX-{env}-*`
+- Host entries: `Host cloudX-{env}-{hostname}`
+- ProxyCommand: `uvx cloudX-proxy connect` or `uvx cloudx-proxy connect`
+- Version header: `# SSH Configuration - Managed by cloudX-proxy`
+
+### Preference
+
+The preferred naming convention is `cloudX` (uppercase X) as it:
+- Distinguishes the tool name more clearly
+- Matches the original project naming
+- Is more visually distinct in SSH configs

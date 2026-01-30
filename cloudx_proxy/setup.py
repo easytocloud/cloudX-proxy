@@ -827,9 +827,11 @@ class CloudXSetup:
         for env_pattern, config_lines in env_patterns.items():
             env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-\*', env_pattern, re.IGNORECASE)
             if env_match:
-                env_name = env_match.group(1).lower()  # Normalize to lowercase
-                result['environments'][env_name] = {
+                env_name_original = env_match.group(1)  # Preserve original case
+                env_name_key = env_name_original.lower()  # Lowercase for dict key (case-insensitive matching)
+                result['environments'][env_name_key] = {
                     'pattern': env_pattern,
+                    'name': env_name_original,  # Store original case for display
                     'lines': config_lines
                 }
 
@@ -838,7 +840,8 @@ class CloudXSetup:
             # Extract environment from hostname
             env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-', host_key, re.IGNORECASE)
             if env_match:
-                env_name = env_match.group(1).lower()  # Normalize to lowercase
+                env_name_original = env_match.group(1)  # Preserve original case
+                env_name_key = env_name_original.lower()  # Lowercase for dict key
 
                 # Skip duplicates
                 if host_key in seen_hosts:
@@ -846,14 +849,15 @@ class CloudXSetup:
                 seen_hosts.add(host_key)
 
                 # Create environment if not exists (shouldn't happen, but handle it)
-                if env_name not in result['environments']:
-                    result['environments'][env_name] = {
-                        'pattern': f"{self.ssh_host_prefix}-{env_name}-*",
-                        'lines': [f"Host {self.ssh_host_prefix}-{env_name}-*"]
+                if env_name_key not in result['environments']:
+                    result['environments'][env_name_key] = {
+                        'pattern': f"{self.ssh_host_prefix}-{env_name_original}-*",
+                        'name': env_name_original,  # Store original case for display
+                        'lines': [f"Host {self.ssh_host_prefix}-{env_name_original}-*"]
                     }
 
                 # Add host entry
-                result['environments'][env_name]['lines'].extend(config_lines)
+                result['environments'][env_name_key]['lines'].extend(config_lines)
 
         # Store global config
         if global_config:
@@ -872,7 +876,7 @@ class CloudXSetup:
             str: Organized SSH config content
         """
         version = self._get_version()
-        lines = [f"# SSH Configuration - Managed by cloudX-proxy v{version}", ""]
+        lines = [f"# SSH Configuration - Managed by {self.ssh_host_prefix}-proxy v{version}", ""]
 
         # Add global section with banner
         if global_config:
@@ -884,10 +888,12 @@ class CloudXSetup:
             lines.append("")
 
         # Add environment sections in alphabetical order
-        for env_name in sorted(environments.keys()):
-            env_data = environments[env_name]
+        for env_key in sorted(environments.keys()):
+            env_data = environments[env_key]
+            # Use original case name for banner if available
+            display_name = env_data.get('name', env_key)
             lines.append("# ==============================================================================")
-            lines.append(f"#  {env_name.upper()}")
+            lines.append(f"#  {display_name}")
             lines.append("# ==============================================================================")
             lines.append("")
 
@@ -952,6 +958,37 @@ class CloudXSetup:
             result = result.replace('\n\n\n', '\n\n')
 
         return result.rstrip() + '\n'
+
+    def _normalize_prefix(self, content: str) -> str:
+        """Normalize all cloudX/cloudx references to match self.ssh_host_prefix.
+
+        This allows users to convert between 'cloudX' and 'cloudx' naming conventions
+        by running cleanup with the desired command name (cloudX-proxy or cloudx-proxy).
+
+        Args:
+            content: SSH config content or single line
+
+        Returns:
+            str: Content with normalized prefix
+        """
+        # Determine the "other" prefix to replace
+        other_prefix = 'cloudx' if self.ssh_host_prefix == 'cloudX' else 'cloudX'
+
+        # Replace in Host patterns: Host cloudX-* or Host cloudx-*
+        content = re.sub(
+            rf'\bHost {other_prefix}-',
+            f'Host {self.ssh_host_prefix}-',
+            content
+        )
+
+        # Replace in ProxyCommand: uvx cloudX-proxy or uvx cloudx-proxy
+        content = re.sub(
+            rf'\buvx {other_prefix}-proxy\b',
+            f'uvx {self.ssh_host_prefix}-proxy',
+            content
+        )
+
+        return content
 
     def _build_generic_config(self) -> str:
         """Build a generic configuration block with common settings for all environments.
@@ -1162,6 +1199,10 @@ class CloudXSetup:
 
             # Read current config
             current_config = self.ssh_config_file.read_text()
+
+            # Normalize prefix (cloudX/cloudx) to match the command being used
+            # This allows users to convert between naming conventions
+            current_config = self._normalize_prefix(current_config)
 
             # For dry-run, show what would be cleaned up
             if self.dry_run:

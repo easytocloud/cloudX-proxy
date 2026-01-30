@@ -336,12 +336,15 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             generic_hosts.append((f"{ssh_host_prefix}-*", "N/A"))
 
         # Process each environment
-        for env_name, env_data in parsed['environments'].items():
+        for env_key, env_data in parsed['environments'].items():
+            # Use original case name for display, fallback to key if not present
+            display_name = env_data.get('name', env_key)
+
             # Add environment pattern to generic hosts
             generic_hosts.append((env_data['pattern'], "N/A"))
 
             # Filter by environment if specified
-            if environment and env_name.lower() != environment.lower():
+            if environment and env_key.lower() != environment.lower():
                 continue
 
             # Parse host entries from environment lines
@@ -356,9 +359,9 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                         # Extract short name from hostname (cloudx-env-name -> name)
                         parts = current_host.split('-')
                         short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
-                        if env_name not in environments:
-                            environments[env_name] = []
-                        environments[env_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
+                        if display_name not in environments:
+                            environments[display_name] = []
+                        environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
 
                     # Extract hostname and inline comment
                     host_part = line.replace('Host ', '', 1).strip()
@@ -377,9 +380,9 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             if current_host:
                 parts = current_host.split('-')
                 short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
-                if env_name not in environments:
-                    environments[env_name] = []
-                environments[env_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
+                if display_name not in environments:
+                    environments[display_name] = []
+                environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
         
         # Display results
         if not environments and not generic_hosts:

@@ -420,7 +420,11 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 
 ### Command Line Options
 
-> **Note:** For backward compatibility, the command `cloudx-proxy` is also available and functions identically to `cloudX-proxy`, but defaults to lowercase `cloudx` prefixes in generated configurations.
+> **Note:** Both `cloudX-proxy` (preferred) and `cloudx-proxy` command names are available. The command name determines the prefix case used in SSH configurations:
+> - `cloudX-proxy` generates `Host cloudX-*` patterns (preferred)
+> - `cloudx-proxy` generates `Host cloudx-*` patterns
+>
+> Run `cleanup` with your preferred command to normalize existing configurations.
 
 #### Setup Command
 ```bash
@@ -518,6 +522,42 @@ uvx cloudX-proxy list --ssh-config ~/.ssh/cloudx/config
 ```
 
 The list command displays all configured cloudX-proxy hosts, grouped by environment. It provides a quick overview of available connections and can help troubleshoot SSH configuration issues.
+
+#### Cleanup Command
+```bash
+uvx cloudX-proxy cleanup [OPTIONS]
+```
+
+The cleanup command reorganizes and normalizes your SSH configuration file. It:
+- Removes duplicate environment and host entries
+- Reorganizes the config with proper structure and banners
+- Normalizes all `cloudX`/`cloudx` prefixes to match the command used
+- Rebuilds ProxyCommand entries to remove redundant flags
+
+Options:
+- `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/cloudX/config.
+- `--dry-run` (flag): Preview cleanup changes without actually modifying the configuration.
+
+Example usage:
+```bash
+# Clean up and normalize to cloudX prefix (preferred)
+uvx cloudX-proxy cleanup
+
+# Clean up and normalize to cloudx prefix
+uvx cloudx-proxy cleanup
+
+# Preview cleanup changes
+uvx cloudX-proxy cleanup --dry-run
+
+# Clean up a custom SSH config
+uvx cloudX-proxy cleanup --ssh-config ~/.ssh/custom/config
+```
+
+**Prefix Normalization:** The cleanup command normalizes all host patterns and ProxyCommand references to match the command name used:
+- Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
+- Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
+
+This allows users to easily convert between naming conventions. The preferred convention is `cloudX` (uppercase X).
 
 ### VSCode
 
