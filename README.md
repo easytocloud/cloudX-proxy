@@ -28,7 +28,7 @@ Using AWS Systems Manager Session Manager, it eliminates the need for direct SSH
 
 1. **Install Prerequisites:**
    ```bash
-   # Install Python 3.9+, AWS CLI v2, Session Manager plugin
+   # Install Python 3.10+, AWS CLI v2, Session Manager plugin
    pip install uv
    ```
 
@@ -68,10 +68,10 @@ All documentation and examples use this convention. If you see different casing 
 
 ## Prerequisites
 
-1. **Python 3.9+** - Required for cloudx-proxy and uv package manager
+1. **Python 3.10+** - Required for cloudx-proxy and uv package manager
    - [Python Installation Guide](https://www.python.org/downloads/)
    - Check your version: `python --version` or `python3 --version`
-   - Supports Python 3.9, 3.10, 3.11, 3.12, 3.13
+   - Supports Python 3.10, 3.11, 3.12, 3.13
 
 2. **AWS CLI v2** - Used to configure AWS profiles and credentials
    - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
@@ -104,6 +104,71 @@ All documentation and examples use this convention. If you see different casing 
    - Provides the integrated development environment
    - Uses the SSH configuration to connect to instances
    - Handles file synchronization and terminal sessions
+
+## Configuration Concepts
+
+Before running setup, it's important to understand the two key configuration elements: the **AWS profile** and the **SSH key**.
+
+### AWS Profile
+
+The AWS profile provides credentials that cloudX-proxy uses to communicate with AWS services. These credentials must belong to an identity with sufficient privileges to manage the EC2 instance backend.
+
+**What the profile is used for:**
+
+| Operation | AWS Actions Used |
+|-----------|------------------|
+| **Setup**: Retrieve instance tags to determine environment and hostname | `ec2:DescribeTags`, `ec2:DescribeInstances` |
+| **Connect**: Check instance availability | `ssm:DescribeInstanceInformation` |
+| **Connect**: Start instance if stopped | `ec2:StartInstances` |
+| **Connect**: Push SSH public key to instance | `ec2-instance-connect:SendSSHPublicKey` |
+| **Connect**: Establish SSM tunnel | `ssm:StartSession` |
+
+**Required permissions:**
+
+The exact permissions required for the AWS profile are defined in the [cloudX repository](https://github.com/easytocloud/cloudX) where the backend infrastructure is created. Specifically, the `VSCodeConnectPolicy` in [templates/cloudX-environment.yaml](https://github.com/easytocloud/cloudX/blob/main/templates/cloudX-environment.yaml) defines the IAM policy that grants these permissions.
+
+**How to configure the profile:**
+
+The profile can be configured in two ways:
+
+1. **IAM User with Access Keys** - Store an Access Key ID and Secret Access Key pair in `~/.aws/credentials`:
+   ```ini
+   [cloudX]
+   aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+   aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+   region = eu-west-1
+   ```
+
+2. **SSO-based Role** - Configure an SSO profile in `~/.aws/config`:
+   ```ini
+   [profile cloudX]
+   sso_start_url = https://mycompany.awsapps.com/start
+   sso_region = eu-west-1
+   sso_account_id = 123456789012
+   sso_role_name = CloudXUserRole
+   region = eu-west-1
+   ```
+   When using SSO, ensure you run `aws sso login --profile cloudX` before using cloudX-proxy.
+
+### SSH Key
+
+The SSH key is used to authenticate the SSH connection to the EC2 instance. However, due to the unique architecture of cloudX-proxy, **the SSH key is not the primary security mechanism**.
+
+**How SSH keys work in cloudX-proxy:**
+
+1. On every connect, cloudX-proxy pushes the **public part** of your SSH key to the instance using EC2 Instance Connect
+2. This key push happens through AWS SSM, which requires valid AWS credentials
+3. The pushed key is only valid for 60 seconds
+4. SSH then uses the **private part** of the key to authenticate through the SSM tunnel
+
+**Security implications:**
+
+- **The SSH key can be changed at any time** - since a new public key is pushed on every connect, you could rotate your SSH key with every connection if desired
+- **The SSH key alone does not grant access** - without valid AWS credentials that have permission to push the key via `ec2-instance-connect:SendSSHPublicKey`, the SSH key is useless
+- **The real security lies with AWS** - access is controlled by IAM permissions on the AWS profile, not by possession of the SSH key
+- **No inbound ports required** - instances don't need SSH port 22 open to the internet; all traffic flows through SSM
+
+This means if your SSH private key were compromised, an attacker would still need valid AWS credentials with the appropriate permissions to actually connect to an instance. The SSH key is essentially a session authentication mechanism, while AWS IAM provides the actual access control.
 
 ## Installation
 
@@ -529,7 +594,7 @@ These permissions are required to bootstrap the instance, so that after creation
 ### Common Issues
 
 1. **Python/Installation Issues**
-   - **Error: "python not found"** - Ensure Python 3.9+ is installed and in PATH
+   - **Error: "python not found"** - Ensure Python 3.10+ is installed and in PATH
    - **Error: "uvx command not found"** - Install uv: `pip install uv`
    - **Error: "Package not found"** - Try updating uv: `pip install --upgrade uv`
    - **ImportError/ModuleNotFoundError** - Check Python version compatibility (`python --version`)
