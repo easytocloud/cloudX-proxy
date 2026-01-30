@@ -347,6 +347,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             # Parse host entries from environment lines
             current_host = None
             current_instance_id = None
+            current_comment = None
 
             for line in env_data['lines']:
                 if line.startswith('Host ') and '*' not in line:
@@ -357,11 +358,16 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                         short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
                         if env_name not in environments:
                             environments[env_name] = []
-                        environments[env_name].append((current_host, short_name, current_instance_id or "N/A"))
+                        environments[env_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
 
-                    # Extract hostname (without inline comment for matching)
+                    # Extract hostname and inline comment
                     host_part = line.replace('Host ', '', 1).strip()
-                    current_host = host_part.split('#')[0].strip()
+                    if '#' in host_part:
+                        current_host = host_part.split('#')[0].strip()
+                        current_comment = host_part.split('#', 1)[1].strip()
+                    else:
+                        current_host = host_part
+                        current_comment = None
                     current_instance_id = None
                 elif current_host and 'HostName' in line:
                     # Extract instance ID
@@ -373,7 +379,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
                 if env_name not in environments:
                     environments[env_name] = []
-                environments[env_name].append((current_host, short_name, current_instance_id or "N/A"))
+                environments[env_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
         
         # Display results
         if not environments and not generic_hosts:
@@ -394,11 +400,13 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         # Print environments and hosts
         for env, hosts in sorted(environments.items()):
             print(info(f"Environment: {env}"))
-            for hostname, name, instance_id in sorted(hosts, key=lambda x: x[1]):
-                if detailed:
-                    print(f"  {name} {secondary(f'({hostname})')} → {format_instance_id(instance_id)}")
+            for hostname, name, instance_id, comment in sorted(hosts, key=lambda x: x[1]):
+                # Build the output line with instance ID and optional comment in brackets
+                if comment:
+                    bracket_content = f"{hostname}, {instance_id}, {comment}"
                 else:
-                    print(f"  {name} {secondary(f'({hostname})')}")
+                    bracket_content = f"{hostname}, {instance_id}"
+                print(f"  {name} {secondary(f'({bracket_content})')}")
             print()
 
         # Print usage hint
