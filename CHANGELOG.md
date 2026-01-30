@@ -1,3 +1,20 @@
+# [0.15.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.14.0...v0.15.0) (2026-01-30)
+
+
+### Bug Fixes
+
+* remove obsolete environment override prompt ([36bb486](https://github.com/easytocloud/cloudX-proxy/commit/36bb48607a779a7c769ce283f1585dbacefe364e))
+
+
+### Features
+
+* add auto-detection to cleanup command ([5389fcd](https://github.com/easytocloud/cloudX-proxy/commit/5389fcd2b155d21048d3e4c4b8b33ce08aafb814))
+* add cleanup command to remove duplicates and reorganize SSH config ([dc549ff](https://github.com/easytocloud/cloudX-proxy/commit/dc549ff98f08135fcafe843606102c1b8259901f))
+* auto-detect SSH config defaults for connect command ([a2aa3eb](https://github.com/easytocloud/cloudX-proxy/commit/a2aa3ebabf9db9c5ed16c13e8f0120799103679c))
+* detect and use matching ssh-host-prefix in cleanup command ([7507261](https://github.com/easytocloud/cloudX-proxy/commit/7507261fb5306092d8dbc894d56cbdbac57334ed))
+* include instance ID and inline comments in list output ([c6faff0](https://github.com/easytocloud/cloudX-proxy/commit/c6faff08583db52dcfa4cf5c25bef2e1e40a15cb))
+* optimize ProxyCommand to suppress redundant default flags ([2c6e81f](https://github.com/easytocloud/cloudX-proxy/commit/2c6e81f2bc56b477d3e92ee0a02d9728262ae263))
+
 # [0.14.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.13.3...v0.14.0) (2026-01-29)
 
 
