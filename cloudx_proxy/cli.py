@@ -317,42 +317,63 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             print(f"SSH config file not found: {config_file}")
             print("Run 'cloudx-proxy setup' to create a configuration.")
             sys.exit(1)
-        
-        # Read SSH config file
+
+        # Detect ssh_host_prefix from command name
+        cmd_name = os.path.basename(sys.argv[0])
+        ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+
+        # Use shared parser from CloudXSetup
+        setup = CloudXSetup(ssh_config=str(config_file), ssh_host_prefix=ssh_host_prefix)
         config_content = config_file.read_text()
-        
-        # Parse hosts using regex
-        # Match Host entries for cloudx hosts (case-insensitive)
-        host_pattern = r'Host\s+(cloud[xX]-[^\s]+)(?:\s*\n(?:(?!\s*Host\s+).)*?(?i:hostname)\s+([^\s]+))?'
-        hosts = re.finditer(host_pattern, config_content, re.DOTALL)
-        
-        # Group hosts by environment
+        parsed = setup._parse_ssh_config(config_content)
+
+        # Extract hosts from parsed structure
         environments = {}
         generic_hosts = []
-        
-        for match in hosts:
-            hostname = match.group(1)
-            instance_id = match.group(2) if match.group(2) else "N/A"
-            
-            # Skip generic patterns like cloudx-* or cloudx-dev-*
-            if hostname.endswith('*'):
-                generic_hosts.append((hostname, instance_id))
+
+        # Add global pattern if present
+        if parsed['global']:
+            generic_hosts.append((f"{ssh_host_prefix}-*", "N/A"))
+
+        # Process each environment
+        for env_name, env_data in parsed['environments'].items():
+            # Add environment pattern to generic hosts
+            generic_hosts.append((env_data['pattern'], "N/A"))
+
+            # Filter by environment if specified
+            if environment and env_name.lower() != environment.lower():
                 continue
-                
-            # Extract environment from hostname (format: cloudx-{env}-{name})
-            parts = hostname.split('-')
-            if len(parts) >= 3:
-                env = parts[1]
-                name = '-'.join(parts[2:])
-                
-                # Filter by environment if specified
-                if environment and env != environment:
-                    continue
-                    
-                if env not in environments:
-                    environments[env] = []
-                    
-                environments[env].append((hostname, name, instance_id))
+
+            # Parse host entries from environment lines
+            current_host = None
+            current_instance_id = None
+
+            for line in env_data['lines']:
+                if line.startswith('Host ') and '*' not in line:
+                    # Save previous host if exists
+                    if current_host:
+                        # Extract short name from hostname (cloudx-env-name -> name)
+                        parts = current_host.split('-')
+                        short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                        if env_name not in environments:
+                            environments[env_name] = []
+                        environments[env_name].append((current_host, short_name, current_instance_id or "N/A"))
+
+                    # Extract hostname (without inline comment for matching)
+                    host_part = line.replace('Host ', '', 1).strip()
+                    current_host = host_part.split('#')[0].strip()
+                    current_instance_id = None
+                elif current_host and 'HostName' in line:
+                    # Extract instance ID
+                    current_instance_id = line.split()[-1].strip()
+
+            # Don't forget the last host
+            if current_host:
+                parts = current_host.split('-')
+                short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                if env_name not in environments:
+                    environments[env_name] = []
+                environments[env_name].append((current_host, short_name, current_instance_id or "N/A"))
         
         # Display results
         if not environments and not generic_hosts:
