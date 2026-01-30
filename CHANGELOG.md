@@ -1,3 +1,10 @@
+# [0.16.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.15.0...v0.16.0) (2026-01-30)
+
+
+### Features
+
+* preserve environment name case and add prefix normalization ([3af07ef](https://github.com/easytocloud/cloudX-proxy/commit/3af07efbf65b6e2bd69fb3f26fec17624fabc922))
+
 # [0.15.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.14.0...v0.15.0) (2026-01-30)
 
 
