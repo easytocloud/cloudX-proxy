@@ -1,3 +1,10 @@
+## [0.16.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.2...v0.16.3) (2026-03-08)
+
+
+### Bug Fixes
+
+* install project deps and audit tools in shared venv for liccheck ([fcde233](https://github.com/easytocloud/cloudX-proxy/commit/fcde233dba08ac5ce39a19092a3c34d92c030482))
+
 ## [0.16.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.1...v0.16.2) (2026-03-08)
 
 
