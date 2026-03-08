@@ -68,7 +68,7 @@ All documentation and examples use this convention. If you see different casing 
 
 ## Prerequisites
 
-1. **Python 3.10+** - Required for cloudx-proxy and uv package manager
+1. **Python 3.10+** - Required for cloudX-proxy and uv package manager
    - [Python Installation Guide](https://www.python.org/downloads/)
    - Check your version: `python --version` or `python3 --version`
    - Supports Python 3.10, 3.11, 3.12, 3.13

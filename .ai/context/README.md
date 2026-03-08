@@ -16,7 +16,7 @@ The original cloudX included:
 
 The current version includes everything from the previous version, plus:
 
-- **New Python-based proxy** (separate repository: [cloudX-proxy](https://github.com/easytocloud/cloudx-proxy))
+- **New Python-based proxy** (separate repository: [cloudX-proxy](https://github.com/easytocloud/cloudX-proxy))
   - Automated setup
   - Written in Python, published on PyPI
   - Works on Mac and Windows

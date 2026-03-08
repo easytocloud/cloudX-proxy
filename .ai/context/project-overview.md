@@ -13,7 +13,7 @@
 
 ## Prerequisites
 
-1. **Python 3.9+**: Required for cloudX-proxy and uv package manager.
+1. **Python 3.10+**: Required for cloudX-proxy and uv package manager.
 2. **AWS CLI v2**: For configuring AWS profiles and credentials.
 3. **AWS Session Manager Plugin**: Enables secure tunneling through AWS Systems Manager.
 4. **OpenSSH Client**: Handles SSH key management and connections.
@@ -96,7 +96,7 @@ After setup, configure VSCode settings (`settings.json`):
 ## Troubleshooting
 
 ### Common Issues
-- **Python/Installation**: Ensure Python 3.9+ and `uv` are installed.
+- **Python/Installation**: Ensure Python 3.10+ and `uv` are installed.
 - **Setup**: Verify AWS profile format (`cloudX-{env}-{user}`) and permissions.
 - **Connection**: Check VSCode SSH config path, instance status, and timeouts.
 - **SSH Keys**: Verify permissions (600 for private key) and 1Password agent status.

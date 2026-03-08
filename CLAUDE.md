@@ -32,16 +32,16 @@ The application is designed to be run via `uvx` (from the `uv` package manager):
 
 ```bash
 # Setup (interactive)
-uvx cloudx-proxy setup
+uvx cloudX-proxy setup
 
 # Setup (non-interactive with parameters)
-uvx cloudx-proxy setup --profile myprofile --ssh-key mykey --instance i-123456789 --hostname myserver --yes
+uvx cloudX-proxy setup --profile myprofile --ssh-key mykey --instance i-123456789 --hostname myserver --yes
 
 # Connect (typically called by SSH ProxyCommand, not directly)
-uvx cloudx-proxy connect i-123456789 22 --profile myprofile
+uvx cloudX-proxy connect i-123456789 22 --profile myprofile
 
 # List configured hosts
-uvx cloudx-proxy list
+uvx cloudX-proxy list
 ```
 
 ## Development Standards
