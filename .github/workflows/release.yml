@@ -22,10 +22,8 @@ jobs:
       - name: Run pip-audit
         run: uv run pip-audit --format=json --output=pip-audit-report.json
 
-      - name: Run liccheck
-        run: |
-          uv pip compile pyproject.toml --no-header -o requirements.txt
-          uv run liccheck -r requirements.txt
+      - name: Run license check
+        run: uv run pip-licenses --fail-on "GPL;AGPL;LGPL;Copyleft"
 
       - name: Upload pip-audit results
         uses: actions/upload-artifact@v7
