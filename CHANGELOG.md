@@ -1,3 +1,10 @@
+## [0.16.4](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.3...v0.16.4) (2026-03-08)
+
+
+### Bug Fixes
+
+* replace liccheck with pip-licenses for Python 3.12+ compatibility ([1ec0272](https://github.com/easytocloud/cloudX-proxy/commit/1ec0272e28eeb8f9f679de7097d7f59a2f265315))
+
 ## [0.16.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.2...v0.16.3) (2026-03-08)
 
 
