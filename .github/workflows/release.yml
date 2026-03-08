@@ -23,7 +23,7 @@ jobs:
         run: uvx pip-audit --format=json --output=pip-audit-report.json -r requirements.txt
 
       - name: Run liccheck
-        run: uvx liccheck -r requirements.txt
+        run: uvx --with setuptools liccheck -r requirements.txt
 
       - name: Upload pip-audit results
         uses: actions/upload-artifact@v7
