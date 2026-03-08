@@ -1,3 +1,10 @@
+## [0.16.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.1...v0.16.2) (2026-03-08)
+
+
+### Bug Fixes
+
+* add setuptools to liccheck uvx environment ([44fd6be](https://github.com/easytocloud/cloudX-proxy/commit/44fd6bec97b2fe55da176dca456bede1d0d9328f))
+
 ## [0.16.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.0...v0.16.1) (2026-03-08)
 
 # [0.16.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.15.0...v0.16.0) (2026-01-30)
