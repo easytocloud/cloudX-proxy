@@ -40,7 +40,7 @@ class CloudXSetup:
         """Fetch instance tags and extract environment and hostname.
 
         Queries EC2 for the instance tags and extracts:
-        - Environment from the 'Environment' tag
+        - Environment by priority: {env} from Name tag > cloudX:environment tag > Environment tag
         - Hostname from the 'Name' tag (expects format: cloudX-{env}-{hostname} | {username})
 
         Args:
@@ -68,27 +68,33 @@ class CloudXSetup:
             instance = response['Reservations'][0]['Instances'][0]
             tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
 
-            # Extract Environment tag
-            environment = tags.get('Environment')
-            if environment:
-                self.print_status(f"Found Environment tag: {environment}", True, 2)
-
-            # Extract hostname from Name tag
+            # Extract hostname and env from Name tag
             # Format: cloudX-{env}-{hostname} | {username}
-            # We only need the first part before ' | '
             hostname = None
+            env_from_name = None
             name_tag = tags.get('Name', '')
             if name_tag:
-                # Get the first part (before ' | ' if present)
                 ssh_hostname = name_tag.split(' | ')[0].strip()
-
-                # Parse cloudX-{env}-{hostname} or cloudx-{env}-{hostname}
                 match = re.match(r'^cloud[xX]-([^-]+)-(.+)$', ssh_hostname)
                 if match:
+                    env_from_name = match.group(1)
                     hostname = match.group(2)
                     self.print_status(f"Found hostname from Name tag: {hostname}", True, 2)
                 else:
                     self.print_status(f"Name tag '{name_tag}' does not match cloudX-{{env}}-{{hostname}} format", None, 2)
+
+            # Determine environment by priority:
+            # 1. {env} from Name tag
+            # 2. cloudX:environment or cloudx:environment tag
+            # 3. Environment tag
+            environment = (
+                env_from_name
+                or tags.get('cloudX:environment')
+                or tags.get('cloudx:environment')
+                or tags.get('Environment')
+            )
+            if environment:
+                self.print_status(f"Found environment: {environment}", True, 2)
 
             return environment, hostname
 
