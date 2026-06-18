@@ -1,3 +1,10 @@
+## [0.16.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.6...v0.16.7) (2026-06-18)
+
+
+### Bug Fixes
+
+* prioritise Name tag env over cloudX:environment and Environment tags ([ec23b29](https://github.com/easytocloud/cloudX-proxy/commit/ec23b29a2e8296e753e1866c960210b76e248420))
+
 ## [0.16.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.5...v0.16.6) (2026-05-12)
 
 ## [0.16.5](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.4...v0.16.5) (2026-03-09)
