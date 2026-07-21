@@ -1,3 +1,10 @@
+## [0.16.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.9...v0.16.10) (2026-07-21)
+
+
+### Bug Fixes
+
+* **deps:** update vulnerable transitive dependencies ([02613ec](https://github.com/easytocloud/cloudX-proxy/commit/02613ecbe7cb156010c161b77f3155809fda205f))
+
 ## [0.16.9](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.8...v0.16.9) (2026-07-21)
 
 ## [0.16.8](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.7...v0.16.8) (2026-07-01)
