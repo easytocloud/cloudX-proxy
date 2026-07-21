@@ -51,4 +51,9 @@ local_scheme = "no-local-version"
 dev = [
     "pip-audit>=2.7.0",
     "pip-licenses>=5.0.0",
+    "pytest>=8.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"

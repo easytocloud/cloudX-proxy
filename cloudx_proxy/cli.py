@@ -1,12 +1,11 @@
 import os
 import sys
-import re
 from pathlib import Path
 import click
 from . import __version__
 from .core import CloudXProxy
 from .setup import CloudXSetup
-from .colors import header, success, error as color_error, info, format_instance_id, format_hostname, format_command, secondary
+from .colors import header, error as color_error, info, format_hostname, format_command, secondary
 
 
 def detect_ssh_defaults() -> tuple:
