@@ -1,3 +1,10 @@
+## [0.16.12](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.11...v0.16.12) (2026-07-21)
+
+
+### Bug Fixes
+
+* resolve CodeQL code-quality findings with test coverage ([45bc7c8](https://github.com/easytocloud/cloudX-proxy/commit/45bc7c8946a32cec86013b525c4f2dfd3c55e346)), closes [hi#severity](https://github.com/hi/issues/severity)
+
 ## [0.16.11](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.10...v0.16.11) (2026-07-21)
 
 ## [0.16.10](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.9...v0.16.10) (2026-07-21)
