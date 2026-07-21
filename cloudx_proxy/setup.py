@@ -1,15 +1,14 @@
 import os
 import re
 import time
-import json
 import subprocess
 import platform
 from pathlib import Path
 from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
-from ._1password import check_1password_cli, check_ssh_agent, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
-from .colors import header, success, error, warning, info, prompt as color_prompt, status_symbol, format_path, format_command
+from ._1password import check_1password_cli, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
+from .colors import header, warning, info, prompt as color_prompt, status_symbol, format_path, format_command
 
 class CloudXSetup:
     # Define SSH key prefix as a constant
@@ -297,7 +296,7 @@ class CloudXSetup:
             # Try to create session with profile
             try:
                 session = boto3.Session(profile_name=self.profile)
-            except:
+            except Exception:
                 # Profile doesn't exist, create it
                 self.print_status(f"AWS profile '{self.profile}' not found", False, 2)
                 self.print_status("Setting up AWS profile...", None, 2)
@@ -537,17 +536,16 @@ class CloudXSetup:
             self.print_status("SSH key created successfully in 1Password", True, 2)
             
             # Save the public key to the expected location
-            if save_public_key(public_key, f"{self.ssh_key_file}.pub"):
-                self.print_status(f"Saved public key to {self.ssh_key_file}.pub", True, 2)
-                return True
-            else:
+            if not save_public_key(public_key, f"{self.ssh_key_file}.pub"):
                 self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
                 return False
-            
+
+            self.print_status(f"Saved public key to {self.ssh_key_file}.pub", True, 2)
+
             # Remind user to enable the key in 1Password SSH agent
             self.print_status(warning("Important: Make sure the key is enabled in 1Password's SSH agent settings"), None, 2)
             return True
-            
+
         except Exception as e:
             self.print_status(f"Error creating key in 1Password: {str(e)}", False, 2)
             return False
@@ -1241,7 +1239,6 @@ class CloudXSetup:
                         # Extract aws-env from the existing ProxyCommand if present
                         aws_env = None
                         if '--aws-env' in line:
-                            import re
                             match = re.search(r'--aws-env\s+(\S+)', line)
                             if match:
                                 aws_env = match.group(1)
@@ -1436,7 +1433,7 @@ class CloudXSetup:
             if self.ssh_config_file.exists() and system_config_path.exists():
                 try:
                     same_file = self.ssh_config_file.samefile(system_config_path)
-                except:
+                except Exception:
                     same_file = str(self.ssh_config_file) == str(system_config_path)
             else:
                 same_file = str(self.ssh_config_file) == str(system_config_path)

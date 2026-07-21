@@ -1,7 +1,6 @@
 import os
 import json
 import subprocess
-from pathlib import Path
 
 def check_1password_cli() -> tuple:
     """Check if 1Password CLI is installed and authenticated.
