@@ -1,3 +1,10 @@
+# [0.17.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.15...v0.17.0) (2026-09-02)
+
+
+### Features
+
+* use logging module for connect flow, add --verbose flag ([b4fbe7e](https://github.com/easytocloud/cloudX-proxy/commit/b4fbe7e87d7e80bc72810c987ed005bf5638f228))
+
 ## [0.16.15](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.14...v0.16.15) (2026-09-02)
 
 ## [0.16.14](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.13...v0.16.14) (2026-08-23)
