@@ -1,8 +1,29 @@
+import logging
 import os
 import sys
 import time
 import boto3
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger("cloudx_proxy")
+
+
+def configure_logging(verbose: bool = False) -> None:
+    """Configure the cloudx_proxy logger to write to stderr.
+
+    Logging goes to stderr (never stdout) so it doesn't interfere with
+    the SSH data stream when this process is used as an SSH ProxyCommand.
+
+    Args:
+        verbose: If True, enable DEBUG-level output; otherwise INFO.
+    """
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.propagate = False
+
 
 class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode",
@@ -75,10 +96,6 @@ class CloudXProxy:
             
         self.ssh_key = os.path.join(self.ssh_dir, f"{ssh_key}.pub")
 
-    def log(self, message: str) -> None:
-        """Log message to stderr to avoid interfering with SSH connection."""
-        print(message, file=sys.stderr)
-
     def get_instance_status(self) -> str:
         """Check if instance is online in SSM."""
         if self.dry_run:
@@ -97,14 +114,14 @@ class CloudXProxy:
     def start_instance(self) -> bool:
         """Start the EC2 instance if it's stopped."""
         if self.dry_run:
-            self.log(f"[DRY RUN] Would start EC2 instance: {self.instance_id}")
+            logger.info(f"[DRY RUN] Would start EC2 instance: {self.instance_id}")
             return True
-            
+
         try:
             self.ec2.start_instances(InstanceIds=[self.instance_id])
             return True
         except ClientError as e:
-            self.log(f"Error starting instance: {e}")
+            logger.error(f"Error starting instance: {e}")
             return False
 
     def wait_for_instance(self, max_attempts: int = 30, delay: int = 3) -> bool:
@@ -118,7 +135,7 @@ class CloudXProxy:
             bool: True if instance came online, False if timeout
         """
         if self.dry_run:
-            self.log(f"[DRY RUN] Would wait for instance to come online (max {max_attempts * delay} seconds)")
+            logger.info(f"[DRY RUN] Would wait for instance to come online (max {max_attempts * delay} seconds)")
             return True
             
         for _ in range(max_attempts):
@@ -137,18 +154,18 @@ class CloudXProxy:
             key_path = self.ssh_key
             if not key_path.endswith('.pub'):
                 key_path += '.pub'
-            self.log(f"[DRY RUN] Would push SSH public key: {key_path}")
-            self.log(f"[DRY RUN] Would send key to instance {self.instance_id} as ec2-user")
+            logger.info(f"[DRY RUN] Would push SSH public key: {key_path}")
+            logger.info(f"[DRY RUN] Would send key to instance {self.instance_id} as ec2-user")
             return True
-            
+
         try:
             # Check if file exists with .pub extension (could be a non-1Password key)
             # or if the .pub extension is already part of self.ssh_key (because of 1Password integration)
             key_path = self.ssh_key
             if not key_path.endswith('.pub'):
                 key_path += '.pub'
-                
-            self.log(f"Using public key: {key_path}")
+
+            logger.info(f"Using public key: {key_path}")
             
             with open(key_path) as f:
                 public_key = f.read()
@@ -160,7 +177,7 @@ class CloudXProxy:
             )
             return True
         except (ClientError, FileNotFoundError) as e:
-            self.log(f"Error pushing SSH key: {e}")
+            logger.error(f"Error pushing SSH key: {e}")
             return False
 
     def start_session(self) -> None:
@@ -176,8 +193,8 @@ class CloudXProxy:
         """
         if self.dry_run:
             region = self.region or 'eu-west-1'  # Use initialized region or default
-            self.log(f"[DRY RUN] Would start SSM session with SSH port forwarding")
-            self.log(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
+            logger.info(f"[DRY RUN] Would start SSM session with SSH port forwarding")
+            logger.info(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
             return
             
         import subprocess
@@ -203,7 +220,9 @@ class CloudXProxy:
                 '--profile', self.profile,
                 '--region', self.session.region_name
             ]
-            
+
+            logger.debug(f"Running: {' '.join(cmd)}")
+
             # Start AWS CLI process with direct stdin/stdout pass-through
             process = subprocess.Popen(
                 cmd,
@@ -220,13 +239,13 @@ class CloudXProxy:
                 if not err_line and process.poll() is not None:
                     break
                 if err_line:
-                    self.log(err_line.decode().strip())
-            
+                    logger.info(err_line.decode().strip())
+
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, cmd)
-            
+
         except subprocess.CalledProcessError as e:
-            self.log(f"Error starting session: {e}")
+            logger.error(f"Error starting session: {e}")
             raise
 
     def connect(self) -> bool:
@@ -237,30 +256,30 @@ class CloudXProxy:
         4. Start SSM session
         """
         if self.dry_run:
-            self.log(f"[DRY RUN] Connection workflow preview:")
-            self.log(f"[DRY RUN] Would check instance status: {self.instance_id}")
-            self.log(f"[DRY RUN] Would start instance if stopped")
-            self.log(f"[DRY RUN] Would wait for instance to come online")
-            self.log(f"[DRY RUN] Would push SSH key to instance")
-            self.log(f"[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
+            logger.info(f"[DRY RUN] Connection workflow preview:")
+            logger.info(f"[DRY RUN] Would check instance status: {self.instance_id}")
+            logger.info(f"[DRY RUN] Would start instance if stopped")
+            logger.info(f"[DRY RUN] Would wait for instance to come online")
+            logger.info(f"[DRY RUN] Would push SSH key to instance")
+            logger.info(f"[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
             return True
-            
+
         status = self.get_instance_status()
-        
+
         if status != 'Online':
-            self.log(f"Instance {self.instance_id} is {status}, starting...")
+            logger.info(f"Instance {self.instance_id} is {status}, starting...")
             if not self.start_instance():
                 return False
-            
-            self.log("Waiting for instance to come online...")
+
+            logger.info("Waiting for instance to come online...")
             if not self.wait_for_instance():
-                self.log("Instance failed to come online")
+                logger.error("Instance failed to come online")
                 return False
-        
-        self.log("Pushing SSH public key...")
+
+        logger.info("Pushing SSH public key...")
         if not self.push_ssh_key():
             return False
-        
-        self.log("Starting SSM session...")
+
+        logger.info("Starting SSM session...")
         self.start_session()
         return True

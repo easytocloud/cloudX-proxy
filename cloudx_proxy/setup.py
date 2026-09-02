@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
 from ._1password import check_1password_cli, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
-from .colors import header, warning, info, prompt as color_prompt, status_symbol, format_path, format_command
+from .colors import header, warning, info, error as color_error, prompt as color_prompt, status_symbol, format_path, format_command
 
 class CloudXSetup:
     # Define SSH key prefix as a constant
@@ -365,7 +365,7 @@ class CloudXSetup:
                 return False
 
         except Exception as e:
-            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
             return False
 
     def _check_1password_availability(self) -> bool:
@@ -490,8 +490,7 @@ class CloudXSetup:
                     self.print_status(f"Specified vault '{self.op_vault}' not found", False, 2)
                     
                     # Display available vaults
-                    self.print_status("Available 1Password vaults:", None, 2)
-                    print("\n\033[96mAvailable 1Password vaults:\033[0m")
+                    print(f"\n{info('Available 1Password vaults:')}")
                     for i, vault in enumerate(vaults):
                         print(f"  {i+1}. {vault['name']}")
                     
@@ -509,7 +508,7 @@ class CloudXSetup:
             else:
                 # No vault specified, prompt the user
                 self.print_status("Creating a new SSH key in 1Password", None, 2)
-                print("\n\033[96mAvailable 1Password vaults:\033[0m")
+                print(f"\n{info('Available 1Password vaults:')}")
                 for i, vault in enumerate(vaults):
                     print(f"  {i+1}. {vault['name']}")
                 
@@ -1179,7 +1178,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
             continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
@@ -1500,7 +1499,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"\033[1;91mError:\033[0m {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
             continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
             if continue_setup:
                 self.print_status("Continuing setup despite SSH config issues", None, 2)
