@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 import click
 from . import __version__
-from .core import CloudXProxy
+from .core import CloudXProxy, configure_logging, logger
 from .setup import CloudXSetup
-from .colors import header, error as color_error, info, format_hostname, format_command, secondary
+from .colors import header, error as color_error, success, info, format_hostname, format_command, secondary
 
 
 def detect_ssh_defaults() -> tuple:
@@ -80,7 +80,8 @@ Main commands:
 @click.option('--ssh-dir', help='Directory for SSH keys and config')
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option('--dry-run', is_flag=True, help='Preview connection workflow without executing')
-def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, dry_run: bool):
+@click.option('--verbose', '-v', is_flag=True, help='Enable debug-level logging')
+def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, dry_run: bool, verbose: bool):
     """Connect to an EC2 instance via SSM.
 
     INSTANCE_ID is the EC2 instance ID to connect to (e.g., i-0123456789abcdef0)
@@ -98,6 +99,8 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
     cloudx-proxy connect i-0123456789abcdef0 22 --ssh-config ~/.ssh/cloudx/config
     cloudx-proxy connect i-0123456789abcdef0 22 --aws-env prod
     """
+    configure_logging(verbose)
+
     try:
         # Auto-detect defaults from config directory
         default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
@@ -127,7 +130,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             dry_run=dry_run
         )
 
-        client.log(f"cloudx-proxy@{__version__} Connecting to instance {instance_id} on port {port}...")
+        logger.info(f"cloudx-proxy@{__version__} Connecting to instance {instance_id} on port {port}...")
 
         if not client.connect():
             sys.exit(1)
@@ -303,7 +306,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 config_file = cloudx_config
         
         if dry_run:
-            print(f"\n\033[1;95m=== cloudx-proxy List (DRY RUN) ===\033[0m\n")
+            print(f"\n{header('=== cloudx-proxy List (DRY RUN) ===')}\n")
             print(f"[DRY RUN] Would read SSH config from: {config_file}")
             if environment:
                 print(f"[DRY RUN] Would filter hosts by environment: {environment}")
@@ -435,7 +438,7 @@ def migrate(target_dir: str, dry_run: bool):
         target_path = Path(os.path.expanduser(target_dir)) if target_dir else None
 
         if setup.migrate_to_cloudx(target_path):
-            print("\n\033[92mMigration completed successfully!\033[0m")
+            print(f"\n{success('Migration completed successfully!')}")
         else:
             sys.exit(1)
 
@@ -490,7 +493,7 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
         setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
         if setup.cleanup_config():
-            print("\n\033[92mCleanup completed successfully!\033[0m")
+            print(f"\n{success('Cleanup completed successfully!')}")
         else:
             sys.exit(1)
 
