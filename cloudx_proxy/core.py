@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -27,8 +28,8 @@ def configure_logging(verbose: bool = False) -> None:
 
 class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode",
-                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None,
-                 ssh_dir: str = None, aws_env: str = None, dry_run: bool = False):
+                 region: str | None = None, ssh_key: str = "vscode", ssh_config: str | None = None,
+                 ssh_dir: str | None = None, aws_env: str | None = None, dry_run: bool = False):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -193,12 +194,12 @@ class CloudXProxy:
         """
         if self.dry_run:
             region = self.region or 'eu-west-1'  # Use initialized region or default
-            logger.info(f"[DRY RUN] Would start SSM session with SSH port forwarding")
+            logger.info("[DRY RUN] Would start SSM session with SSH port forwarding")
             logger.info(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
             return
             
-        import subprocess
         import platform
+        import subprocess
         
         try:
             # Build environment with AWS credentials configuration
@@ -268,12 +269,12 @@ class CloudXProxy:
         4. Start SSM session
         """
         if self.dry_run:
-            logger.info(f"[DRY RUN] Connection workflow preview:")
+            logger.info("[DRY RUN] Connection workflow preview:")
             logger.info(f"[DRY RUN] Would check instance status: {self.instance_id}")
-            logger.info(f"[DRY RUN] Would start instance if stopped")
-            logger.info(f"[DRY RUN] Would wait for instance to come online")
-            logger.info(f"[DRY RUN] Would push SSH key to instance")
-            logger.info(f"[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
+            logger.info("[DRY RUN] Would start instance if stopped")
+            logger.info("[DRY RUN] Would wait for instance to come online")
+            logger.info("[DRY RUN] Would push SSH key to instance")
+            logger.info("[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
             return True
 
         status = self.get_instance_status()

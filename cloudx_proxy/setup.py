@@ -1,14 +1,16 @@
 import os
+import platform
 import re
-import time
 import shlex
 import shutil
 import subprocess
-import platform
+import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import ClassVar
+
 import boto3
 from botocore.exceptions import ClientError
+
 from . import __version__
 from ._1password import (
     OP_TIMEOUT,
@@ -18,7 +20,10 @@ from ._1password import (
     list_ssh_keys,
     save_public_key,
 )
-from .colors import header, warning, info, error as color_error, prompt as color_prompt, status_symbol, format_path, format_command
+from .colors import error as color_error
+from .colors import format_command, format_path, header, info, status_symbol, warning
+from .colors import prompt as color_prompt
+
 
 class CloudXSetup:
     # Define SSH key prefix as a constant
@@ -109,7 +114,7 @@ class CloudXSetup:
         text = str(value)
         return f'"{text}"' if re.search(r'\s', text) else text
 
-    def get_instance_tags(self, instance_id: str) -> Tuple[Optional[str], Optional[str]]:
+    def get_instance_tags(self, instance_id: str) -> tuple[str | None, str | None]:
         """Fetch instance tags and extract environment and hostname.
 
         Queries EC2 for the instance tags and extracts:
@@ -185,11 +190,11 @@ class CloudXSetup:
             self.print_status(f"Error fetching instance tags: {e.response['Error']['Message']}", False, 2)
             return None, None
         except Exception as e:
-            self.print_status(f"Error fetching instance tags: {str(e)}", False, 2)
+            self.print_status(f"Error fetching instance tags: {e!s}", False, 2)
             return None, None
     
-    def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str = None,
-                 ssh_dir: str = None, aws_env: str = None, use_1password: str = None, instance_id: str = None,
+    def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str | None = None,
+                 ssh_dir: str | None = None, aws_env: str | None = None, use_1password: str | None = None, instance_id: str | None = None,
                  ssh_host_prefix: str = "cloudx", non_interactive: bool = False, dry_run: bool = False):
         """Initialize cloudx-proxy setup.
         
@@ -309,7 +314,7 @@ class CloudXSetup:
             self.print_status("Created symlink to 1Password agent socket", True, 2)
             return True
         except Exception as e:
-            self.print_status(f"Failed to create symlink: {str(e)}", False, 2)
+            self.print_status(f"Failed to create symlink: {e!s}", False, 2)
             return False
 
     def print_header(self, text: str) -> None:
@@ -320,7 +325,7 @@ class CloudXSetup:
         """
         print(f"\n\n{header(f'=== {text} ===')}")
 
-    def print_status(self, message: str, status: bool = None, indent: int = 0) -> None:
+    def print_status(self, message: str, status: bool | None = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
 
         Args:
@@ -358,7 +363,7 @@ class CloudXSetup:
         self.print_status(f"Continuing setup despite {context}", None, 2)
         return True
 
-    def prompt(self, message: str, default: str = None) -> str:
+    def prompt(self, message: str, default: str | None = None) -> str:
         """Display a colored prompt for user input.
         
         Args:
@@ -378,10 +383,7 @@ class CloudXSetup:
                 raise ValueError(f"Non-interactive mode requires default value for: {message}")
         
         # Interactive prompt
-        if default:
-            prompt_text = f"{color_prompt(message)} [{default}]: "
-        else:
-            prompt_text = f"{color_prompt(message)}: "
+        prompt_text = f"{color_prompt(message)} [{default}]: " if default else f"{color_prompt(message)}: "
         response = input(prompt_text)
         return response if response else default
 
@@ -401,12 +403,12 @@ class CloudXSetup:
                 self.print_status(f"Set {directory} permissions to 700", True, 2)
             return True
         except Exception as e:
-            self.print_status(f"Error setting permissions: {str(e)}", False, 2)
+            self.print_status(f"Error setting permissions: {e!s}", False, 2)
             return False
 
     # Tools that must be on PATH for a connection to work, with the page that
     # explains how to install each one
-    REQUIRED_TOOLS = {
+    REQUIRED_TOOLS: ClassVar[dict[str, str]] = {
         'aws': "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
         'session-manager-plugin': "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html",
     }
@@ -459,7 +461,7 @@ class CloudXSetup:
             self.print_status(f"[DRY RUN] Would check AWS profile configuration for '{self.profile}'")
             if self.aws_env:
                 self.print_status(f"[DRY RUN] Would configure AWS environment: {self.aws_env}", None, 2)
-            self.print_status(f"[DRY RUN] Would verify AWS credentials and extract cloudX environment", None, 2)
+            self.print_status("[DRY RUN] Would verify AWS credentials and extract cloudX environment", None, 2)
             return True
             
         self.print_status("Checking AWS profile configuration...")
@@ -543,7 +545,7 @@ class CloudXSetup:
                 return False
 
         except Exception as e:
-            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return False
 
     def _check_1password_availability(self) -> bool:
@@ -644,7 +646,7 @@ class CloudXSetup:
                         self.print_status(f"Failed to save public key to {self.ssh_key_file}.pub", False, 2)
                         return False
                 else:
-                    self.print_status(f"Failed to retrieve public key from 1Password", False, 2)
+                    self.print_status("Failed to retrieve public key from 1Password", False, 2)
                     return False
             
             # If we reach here, the key doesn't exist and we need to create it
@@ -705,7 +707,7 @@ class CloudXSetup:
                 
             # Create a new SSH key in 1Password
             self.print_status(f"Creating new SSH key '{ssh_key_title_with_prefix}' in 1Password...", None, 2)
-            success, public_key, item_id = create_ssh_key(ssh_key_title_with_prefix, selected_vault)
+            success, public_key, _item_id = create_ssh_key(ssh_key_title_with_prefix, selected_vault)
             
             if not success:
                 self.print_status("Failed to create SSH key in 1Password", False, 2)
@@ -725,7 +727,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"Error creating key in 1Password: {str(e)}", False, 2)
+            self.print_status(f"Error creating key in 1Password: {e!s}", False, 2)
             return False
 
     def setup_ssh_key(self) -> bool:
@@ -739,11 +741,11 @@ class CloudXSetup:
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would check SSH key '{self.ssh_key}' configuration")
             if self.use_1password:
-                self.print_status(f"[DRY RUN] Would use 1Password SSH agent for authentication", None, 2)
+                self.print_status("[DRY RUN] Would use 1Password SSH agent for authentication", None, 2)
                 self.print_status(f"[DRY RUN] Would create or find SSH key in vault: {self.op_vault}", None, 2)
             else:
                 self.print_status(f"[DRY RUN] Would create SSH key pair at: {self.ssh_key_file}", None, 2)
-                self.print_status(f"[DRY RUN] Would set proper file permissions", None, 2)
+                self.print_status("[DRY RUN] Would set proper file permissions", None, 2)
             return True
         
         # Check 1Password integration if requested
@@ -825,7 +827,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"Error: {str(e)}", False, 2)
+            self.print_status(f"Error: {e!s}", False, 2)
             return self.confirm_continue_after_error("SSH key issues")
 
     def _build_proxy_command(self) -> str:
@@ -902,7 +904,7 @@ class CloudXSetup:
     # case-insensitive, so 'host', 'Host' and 'HOST' all open a block.
     _SECTION_KEYWORD_RE = re.compile(r'^\s*(host|match)\s+(.*)$', re.IGNORECASE)
 
-    def _split_config_blocks(self, config_content: str) -> Tuple[list, list, list]:
+    def _split_config_blocks(self, config_content: str) -> tuple[list, list, list]:
         """Split an SSH config into a preamble and Host/Match blocks.
 
         Comment and blank lines that trail a block are held back and attached to
@@ -993,7 +995,7 @@ class CloudXSetup:
             lines.pop()
         return lines
 
-    def _environment_for_host(self, host_name: str, env_names: list) -> Optional[str]:
+    def _environment_for_host(self, host_name: str, env_names: list) -> str | None:
         """Determine which environment a host entry belongs to.
 
         Environment names may contain hyphens (e.g. 'pre-prod'), which makes
@@ -1155,7 +1157,7 @@ class CloudXSetup:
         return result
 
     def _organize_ssh_config(self, global_config: str, environments: dict,
-                             other_blocks: list = None) -> str:
+                             other_blocks: list | None = None) -> str:
         """Organize SSH config with proper structure and banners.
 
         Args:
@@ -1411,7 +1413,7 @@ class CloudXSetup:
                 parsed['environments'][env_key] = {
                     'pattern': env_pattern,
                     'name': cloudx_env,
-                    'lines': [f"Host {env_pattern}"] + self._build_environment_config(cloudx_env).split('\n')[1:]
+                    'lines': [f"Host {env_pattern}", *self._build_environment_config(cloudx_env).split('\n')[1:]]
                 }
                 self.print_status(f"Created new environment section for '{cloudx_env}'", None, 2)
             else:
@@ -1458,7 +1460,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return self.confirm_continue_after_error("SSH config issues")
 
     def cleanup_config(self) -> bool:
@@ -1507,7 +1509,7 @@ class CloudXSetup:
             parsed = self._parse_ssh_config(current_config)
 
             # Optimize ProxyCommand in environment patterns to remove redundant flags
-            for env_name in parsed['environments'].keys():
+            for env_name in parsed['environments']:
                 # Get existing environment lines
                 env_lines = parsed['environments'][env_name]['lines']
 
@@ -1564,11 +1566,11 @@ class CloudXSetup:
                 self.print_status(
                     f"Preserved {len(parsed['other'])} unmanaged entries as-is", True, 2
                 )
-            self.print_status(f"Cleanup completed and config reorganized", True, 2)
+            self.print_status("Cleanup completed and config reorganized", True, 2)
             return True
 
         except Exception as e:
-            self.print_status(f"Error during cleanup: {str(e)}", False, 2)
+            self.print_status(f"Error during cleanup: {e!s}", False, 2)
             return False
 
     def resolve_environment_name(self, cloudx_env: str) -> str:
@@ -1603,7 +1605,7 @@ class CloudXSetup:
             )
         return resolved
 
-    def _check_and_create_generic_config(self, current_config: str) -> Tuple[bool, str]:
+    def _check_and_create_generic_config(self, current_config: str) -> tuple[bool, str]:
         """Check if generic configuration exists and create it if needed.
         
         Args:
@@ -1681,7 +1683,7 @@ class CloudXSetup:
             return self._set_directory_permissions(control_dir)
             
         except Exception as e:
-            self.print_status(f"Error creating control directory: {str(e)}", False, 2)
+            self.print_status(f"Error creating control directory: {e!s}", False, 2)
             return False
     
     def setup_ssh_config(self, cloudx_env: str, instance_id: str, hostname: str) -> bool:
@@ -1723,7 +1725,7 @@ class CloudXSetup:
                 return False
 
         if self.dry_run:
-            self.print_status(f"[DRY RUN] Would set up SSH configuration with three-tier approach")
+            self.print_status("[DRY RUN] Would set up SSH configuration with three-tier approach")
             self.print_status(f"[DRY RUN] Would create generic pattern: {self.ssh_host_prefix}-*", None, 2)
             self.print_status(f"[DRY RUN] Would create environment pattern: {self.ssh_host_prefix}-{cloudx_env}-*", None, 2)
             self.print_status(f"[DRY RUN] Would create host entry: {self.ssh_host_prefix}-{cloudx_env}-{hostname} -> {instance_id}", None, 2)
@@ -1830,7 +1832,7 @@ class CloudXSetup:
             return True
 
         except Exception as e:
-            self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
+            self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return self.confirm_continue_after_error("SSH config issues")
 
     def check_instance_setup(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
@@ -1884,7 +1886,7 @@ class CloudXSetup:
             self.print_status("Instance may be stopped or still starting up", None, 4)
             return False
         except Exception as e:
-            self.print_status(f"Error checking SSH connection: {str(e)}", False, 4)
+            self.print_status(f"Error checking SSH connection: {e!s}", False, 4)
             return False
 
     def wait_for_setup_completion(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
@@ -1903,7 +1905,7 @@ class CloudXSetup:
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would check instance accessibility for: {hostname}")
             self.print_status(f"[DRY RUN] Would test connection to instance: {instance_id}", None, 2)
-            self.print_status(f"[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
+            self.print_status("[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
             return True
         
         # On Windows, skip the automated connection test as it may hang
@@ -1942,7 +1944,7 @@ class CloudXSetup:
         self.print_status("Timeout waiting for SSH access", False, 2)
         return self.confirm_continue_after_error("SSH access issues")
 
-    def migrate_to_cloudx(self, target_dir: Path = None) -> bool:
+    def migrate_to_cloudx(self, target_dir: Path | None = None) -> bool:
         """Migrate from ~/.ssh/vscode to ~/.ssh/cloudX (or specified target).
         
         Args:
@@ -1969,7 +1971,7 @@ class CloudXSetup:
             self.print_status(f"  - Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 3)
             self.print_status(f"  - Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 3)
 
-            self.print_status(f"[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
+            self.print_status("[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
             return True
             
         if not vscode_dir.exists():
@@ -2056,7 +2058,7 @@ class CloudXSetup:
             return True
             
         except Exception as e:
-            self.print_status(f"Migration failed: {str(e)}", False, 2)
+            self.print_status(f"Migration failed: {e!s}", False, 2)
             return False
 
     def check_and_perform_migration(self) -> bool:
@@ -2078,10 +2080,9 @@ class CloudXSetup:
             
         should_migrate = self.prompt("Do you want to migrate to ~/.ssh/cloudX?", "Y").lower() != 'n'
         
-        if should_migrate:
-            if self.migrate_to_cloudx():
-                self.pending_migration = False
-                return True
+        if should_migrate and self.migrate_to_cloudx():
+            self.pending_migration = False
+            return True
         
         self.print_status("Continuing with existing ~/.ssh/vscode configuration", None, 2)
         

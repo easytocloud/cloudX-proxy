@@ -9,7 +9,6 @@ None to an UNSET sentinel in the meantime. Click supports this natively via
 upgrade that changes it fails here rather than in the field.
 """
 
-import pytest
 from click.testing import CliRunner
 
 from cloudx_proxy.cli import cli
@@ -21,13 +20,7 @@ def run_setup(tmp_path, monkeypatch, extra_args):
 
     monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
 
-    return CliRunner().invoke(cli, [
-        "setup", "--dry-run", "--yes",
-        "--instance", "i-0123456789abcdef0",
-        "--hostname", "web1",
-        "--environment", "dev",
-        "--ssh-config", str(tmp_path / "cloudX" / "config"),
-    ] + extra_args)
+    return CliRunner().invoke(cli, ["setup", "--dry-run", "--yes", "--instance", "i-0123456789abcdef0", "--hostname", "web1", "--environment", "dev", "--ssh-config", str(tmp_path / "cloudX" / "config"), *extra_args])
 
 
 class TestOnePasswordOption:

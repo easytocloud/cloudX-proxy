@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import subprocess
 
 # The 1Password CLI can block on an interactive unlock (biometrics, or a
@@ -105,7 +105,7 @@ def create_ssh_key(title: str, vault: str) -> tuple:
         item_id = ""
         public_key = ""
         
-        for idx, line in enumerate(output_lines):
+        for _idx, line in enumerate(output_lines):
             if line.startswith("ID:"):
                 item_id = line.split(":", 1)[1].strip()
             

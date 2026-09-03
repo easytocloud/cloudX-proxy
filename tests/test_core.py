@@ -91,9 +91,8 @@ class TestStderrRelay:
         def missing(cmd, **kwargs):
             raise FileNotFoundError(2, "No such file or directory", cmd[0])
 
-        with mock.patch("subprocess.Popen", missing):
-            with pytest.raises(FileNotFoundError):
-                make_proxy().start_session()
+        with mock.patch("subprocess.Popen", missing), pytest.raises(FileNotFoundError):
+            make_proxy().start_session()
 
         captured = capsys.readouterr()
         assert "AWS CLI is required" in captured.err

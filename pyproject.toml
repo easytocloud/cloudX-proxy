@@ -52,7 +52,30 @@ dev = [
     "pip-audit>=2.7.0",
     "pip-licenses>=5.0.0",
     "pytest>=8.0.0",
+    "ruff>=0.9.0",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # import sorting
+    "UP",   # pyupgrade (target is Python 3.10+)
+    "B",    # bugbear
+    "SIM",  # simplifications
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line length: many long help strings and status messages
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately raise bare Exception and shadow names in fixtures
+"tests/*" = ["B011"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -26,6 +26,19 @@ python -m build
 pip install dist/cloudx_proxy-*.whl
 ```
 
+### Testing and Linting
+
+```bash
+# Run the test suite
+uv run pytest
+
+# Lint (config in pyproject.toml under [tool.ruff])
+uv run ruff check cloudx_proxy tests
+```
+
+`tests/test_backward_compat.py` pins the behaviour existing installations
+depend on; see CONTRIBUTING.md before changing those fixtures.
+
 ### Running the Application
 
 The application is designed to be run via `uvx` (from the `uv` package manager):
@@ -50,7 +63,7 @@ When working on this codebase, prioritize:
 1. **Type safety** - Add complete type hints to new code
 2. **Single responsibility** - Keep classes and methods focused
 3. **Error handling** - Use specific exceptions with context
-4. **Testing** - Write tests for new functionality (when framework exists)
+4. **Testing** - Write tests for new functionality; run `uv run pytest` and `uv run ruff check`
 5. **Security** - Validate all inputs and sanitize subprocess calls
 
 ## Release Process

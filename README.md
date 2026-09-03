@@ -230,6 +230,14 @@ The setup command will:
    - Offers to wait for setup completion
    - Monitors setup progress
 
+### Prerequisites Check
+
+`setup` first checks that the AWS CLI and the Session Manager plugin are on your
+PATH. Both are invoked from inside the SSH ProxyCommand, where a missing binary
+surfaces only as "Could not establish connection" in VSCode, so setup reports it
+up front. Setup continues either way - writing the configuration is still useful -
+but connections will fail until they are installed.
+
 ### SSH Configuration
 
 The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
@@ -534,6 +542,11 @@ The cleanup command reorganizes and normalizes your SSH configuration file. It:
 - Reorganizes the config with proper structure and banners
 - Normalizes all `cloudX`/`cloudx` prefixes to match the command used
 - Rebuilds ProxyCommand entries to remove redundant flags
+- Preserves entries it does not manage (your own `Host` and `Match` blocks,
+  with the comments above them) in a clearly marked section at the end
+- Writes the previous contents to `<config>.bak` before rewriting
+
+`cleanup` performs a full rewrite of the file, so the backup is your undo.
 
 Options:
 - `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/cloudX/config.

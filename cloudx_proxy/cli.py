@@ -1,11 +1,14 @@
 import os
 import sys
 from pathlib import Path
+
 import click
+
 from . import __version__
+from .colors import error as color_error
+from .colors import format_command, format_hostname, header, info, secondary, success
 from .core import CloudXProxy, configure_logging, logger
 from .setup import CloudXSetup
-from .colors import header, error as color_error, success, info, format_hostname, format_command, secondary
 
 
 def detect_ssh_defaults() -> tuple:
@@ -97,7 +100,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 
     try:
         # Auto-detect defaults from config directory
-        default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+        default_profile, default_ssh_key, _detected_dir = detect_ssh_defaults()
 
         # Use detected defaults if options not provided
         if not profile:
@@ -130,7 +133,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -184,10 +187,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
             cmd_name = os.path.basename(sys.argv[0])
-            if cmd_name == 'cloudX-proxy':
-                ssh_host_prefix = 'cloudX'
-            else:
-                ssh_host_prefix = 'cloudx'
+            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
 
         setup = CloudXSetup(
             profile=profile,
@@ -299,7 +299,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             sys.exit(1)
         
     except Exception as e:
-        print(f"\n{color_error(f'Error: {str(e)}')}", file=sys.stderr)
+        print(f"\n{color_error(f'Error: {e!s}')}", file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -343,8 +343,8 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             if environment:
                 print(f"[DRY RUN] Would filter hosts by environment: {environment}")
             if detailed:
-                print(f"[DRY RUN] Would show detailed information including instance IDs")
-            print(f"[DRY RUN] Would parse SSH configuration and display grouped hosts")
+                print("[DRY RUN] Would show detailed information including instance IDs")
+            print("[DRY RUN] Would parse SSH configuration and display grouped hosts")
             return
         
         if not config_file.exists():
@@ -429,7 +429,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         # Print generic patterns if any and detailed mode
         if generic_hosts and detailed:
             print(info("Generic Patterns:"))
-            for hostname, instance_id in generic_hosts:
+            for hostname, _instance_id in generic_hosts:
                 print(f"  {format_hostname(hostname)}")
             print()
 
@@ -438,10 +438,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             print(info(f"Environment: {env}"))
             for hostname, name, instance_id, comment in sorted(hosts, key=lambda x: x[1]):
                 # Build the output line with instance ID and optional comment in brackets
-                if comment:
-                    bracket_content = f"{hostname}, {instance_id}, {comment}"
-                else:
-                    bracket_content = f"{hostname}, {instance_id}"
+                bracket_content = f"{hostname}, {instance_id}, {comment}" if comment else f"{hostname}, {instance_id}"
                 print(f"  {name} {secondary(f'({bracket_content})')}")
             print()
 
@@ -451,7 +448,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         print("  Connect with VSCode: Use Remote Explorer in VSCode")
         
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -474,7 +471,7 @@ def migrate(target_dir: str, dry_run: bool):
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -510,16 +507,13 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
     try:
         # Auto-detect SSH config location if not provided
         if not ssh_config:
-            default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+            _default_profile, _default_ssh_key, detected_dir = detect_ssh_defaults()
             ssh_config = f"{detected_dir}/config"
 
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
             cmd_name = os.path.basename(sys.argv[0])
-            if cmd_name == 'cloudX-proxy':
-                ssh_host_prefix = 'cloudX'
-            else:
-                ssh_host_prefix = 'cloudx'
+            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
 
         setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
@@ -529,7 +523,7 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':

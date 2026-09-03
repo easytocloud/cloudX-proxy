@@ -5,7 +5,6 @@ no-color support for non-TTY environments.
 """
 
 import sys
-from typing import Optional
 
 
 class Colors:
@@ -104,7 +103,7 @@ def secondary(text: str) -> str:
     return colorize(text, Colors.SECONDARY, bold=False)
 
 
-def status_symbol(status: Optional[bool]) -> str:
+def status_symbol(status: bool | None) -> str:
     """Get status symbol with color.
 
     Args:
