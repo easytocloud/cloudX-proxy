@@ -36,12 +36,10 @@ class TestFailuresAreNotReportedAsSuccess:
         assert not blocked_setup.ssh_config_file.exists()
 
     def test_ssh_key_failure_returns_false(self, blocked_setup, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
         def boom(*args, **kwargs):
             raise OSError("cannot generate a key here")
 
-        monkeypatch.setattr(setup_mod.subprocess, "run", boom)
+        monkeypatch.setattr("cloudx_proxy.setup.subprocess.run", boom)
 
         assert blocked_setup.setup_ssh_key() is False
 
@@ -97,23 +95,19 @@ class TestOnePasswordIsNotSilentlySubstituted:
 
 class TestDryRunDoesNotCallAws:
     def test_get_instance_tags_makes_no_aws_call(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
         def fail(*args, **kwargs):
             raise AssertionError("dry run must not create a boto3 session")
 
-        monkeypatch.setattr(setup_mod.boto3, "Session", fail)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", fail)
         setup = CloudXSetup(ssh_dir=str(tmp_path / "ssh"), dry_run=True)
 
         assert setup.get_instance_tags("i-0123456789abcdef0") == (None, None)
 
     def test_full_dry_run_setup_needs_no_credentials(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
         def fail(*args, **kwargs):
             raise AssertionError("dry run must not create a boto3 session")
 
-        monkeypatch.setattr(setup_mod.boto3, "Session", fail)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", fail)
 
         result = CliRunner().invoke(cli, [
             "setup", "--dry-run", "--yes",
@@ -128,9 +122,7 @@ class TestDryRunDoesNotCallAws:
         assert not (tmp_path / "cloudX").exists(), "dry run must not write anything"
 
     def test_missing_environment_is_reported_not_guessed(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
 
         result = CliRunner().invoke(cli, [
             "setup", "--dry-run", "--yes",
@@ -146,9 +138,7 @@ class TestDryRunDoesNotCallAws:
 
 class TestEnvironmentOption:
     def test_explicit_environment_is_used(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
 
         result = CliRunner().invoke(cli, [
             "setup", "--dry-run", "--yes",
@@ -162,9 +152,7 @@ class TestEnvironmentOption:
         assert "cloudx-pre-prod-*" in result.output
 
     def test_invalid_environment_is_rejected(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
 
         result = CliRunner().invoke(cli, [
             "setup", "--dry-run", "--yes",

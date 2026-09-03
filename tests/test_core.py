@@ -31,11 +31,14 @@ def make_proxy():
     return proxy
 
 
-def run_child(source, **popen_kwargs):
+def run_child(source, capture_kwargs=None):
     """Run start_session against a stub child process running `source`."""
     real_popen = subprocess.Popen
 
     def fake_popen(cmd, **kwargs):
+        if capture_kwargs is not None:
+            capture_kwargs["cmd"] = cmd
+            capture_kwargs.update(kwargs)
         return real_popen(
             [sys.executable, "-c", source],
             stdin=subprocess.DEVNULL,
@@ -43,7 +46,9 @@ def run_child(source, **popen_kwargs):
             stderr=subprocess.PIPE,
         )
 
-    with mock.patch("subprocess.Popen", fake_popen):
+    # The AWS CLI is resolved on PATH before launching; stand in for it.
+    with mock.patch("cloudx_proxy.core.shutil.which", lambda name: "/usr/bin/aws"), \
+         mock.patch("subprocess.Popen", fake_popen):
         make_proxy().start_session()
 
 
@@ -88,13 +93,65 @@ class TestStderrRelay:
     def test_missing_aws_cli_is_reported(self, capsys):
         configure_logging(False)  # binds to the captured stderr
 
-        def missing(cmd, **kwargs):
-            raise FileNotFoundError(2, "No such file or directory", cmd[0])
-
-        with mock.patch("subprocess.Popen", missing), pytest.raises(FileNotFoundError):
+        with mock.patch("cloudx_proxy.core.shutil.which", lambda name: None), \
+             pytest.raises(FileNotFoundError):
             make_proxy().start_session()
 
         captured = capsys.readouterr()
         assert "AWS CLI is required" in captured.err
         assert "getting-started-install" in captured.err
         assert captured.out == ""
+
+
+class TestNoShellIsUsed:
+    """The session used to launch with shell=True on Windows.
+
+    That hands the joined command line to cmd.exe, where --profile and --region
+    - which arrive from the SSH config's ProxyCommand and are not validated -
+    would have been subject to shell metacharacter interpretation (CWE-78).
+    """
+
+    def test_popen_is_not_given_a_shell(self):
+        captured = {}
+        run_child("import sys; sys.exit(0)", capture_kwargs=captured)
+
+        assert captured.get("shell") in (None, False), "the command must not go through a shell"
+
+    def test_the_executable_is_a_resolved_path(self):
+        captured = {}
+        run_child("import sys; sys.exit(0)", capture_kwargs=captured)
+
+        assert captured["cmd"][0] == "/usr/bin/aws"
+
+    def test_arguments_are_passed_as_a_list_not_a_string(self):
+        captured = {}
+        run_child("import sys; sys.exit(0)", capture_kwargs=captured)
+
+        cmd = captured["cmd"]
+        assert isinstance(cmd, list)
+        assert "ssm" in cmd
+        assert "start-session" in cmd
+
+    def test_a_metacharacter_in_the_profile_is_never_interpreted(self):
+        """A hostile --profile in a ProxyCommand must reach aws as one argument."""
+        captured = {}
+        proxy = make_proxy()
+        proxy.profile = 'evil & calc.exe'
+
+        real_popen = subprocess.Popen
+
+        def fake_popen(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured.update(kwargs)
+            return real_popen(
+                [sys.executable, "-c", "import sys; sys.exit(0)"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+
+        with mock.patch("cloudx_proxy.core.shutil.which", lambda name: "/usr/bin/aws"), \
+             mock.patch("subprocess.Popen", fake_popen):
+            proxy.start_session()
+
+        assert captured["cmd"][captured["cmd"].index("--profile") + 1] == 'evil & calc.exe'
+        assert captured.get("shell") in (None, False)

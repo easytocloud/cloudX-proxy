@@ -16,9 +16,7 @@ from cloudx_proxy.cli import cli
 
 def run_setup(tmp_path, monkeypatch, extra_args):
     """Invoke `setup --dry-run` with no AWS access, returning the result."""
-    import cloudx_proxy.setup as setup_mod
-
-    monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
+    monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
 
     return CliRunner().invoke(cli, ["setup", "--dry-run", "--yes", "--instance", "i-0123456789abcdef0", "--hostname", "web1", "--environment", "dev", "--ssh-config", str(tmp_path / "cloudX" / "config"), *extra_args])
 
@@ -45,9 +43,7 @@ class TestOnePasswordOption:
 
     def test_bare_flag_does_not_swallow_the_next_option(self, tmp_path, monkeypatch):
         """`--1password --instance x` must not read '--instance' as the vault."""
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.boto3, "Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
 
         result = CliRunner().invoke(cli, [
             "setup", "--dry-run", "--yes",

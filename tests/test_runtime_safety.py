@@ -134,9 +134,7 @@ class TestOnePasswordFlag:
 
 class TestPrerequisites:
     def test_reports_missing_tools(self, setup, monkeypatch, capsys):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.shutil, "which", lambda name: None)
+        monkeypatch.setattr("cloudx_proxy.setup.shutil.which", lambda name: None)
 
         assert setup.check_prerequisites() is False
 
@@ -145,19 +143,15 @@ class TestPrerequisites:
         assert "session-manager-working-with-install-plugin" in output
 
     def test_passes_when_tools_are_present(self, setup, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.shutil, "which", lambda name: f"/usr/bin/{name}")
+        monkeypatch.setattr("cloudx_proxy.setup.shutil.which", lambda name: f"/usr/bin/{name}")
 
         assert setup.check_prerequisites() is True
 
     def test_dry_run_does_not_probe(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
         def fail(name):
             raise AssertionError("dry run must not probe PATH")
 
-        monkeypatch.setattr(setup_mod.shutil, "which", fail)
+        monkeypatch.setattr("cloudx_proxy.setup.shutil.which", fail)
         setup = CloudXSetup(ssh_dir=str(tmp_path), dry_run=True)
 
         assert setup.check_prerequisites() is True
@@ -165,8 +159,6 @@ class TestPrerequisites:
 
 class TestSshProbeIsNonInteractive:
     def test_batch_mode_and_host_key_options_are_passed(self, setup, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
         captured = {}
 
         class Result:
@@ -179,7 +171,7 @@ class TestSshProbeIsNonInteractive:
             captured["kwargs"] = kwargs
             return Result()
 
-        monkeypatch.setattr(setup_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr("cloudx_proxy.setup.subprocess.run", fake_run)
 
         assert setup.check_instance_setup("i-0123456789abcdef0", "web1", "dev") is True
 
@@ -201,9 +193,7 @@ class TestOnePasswordAgentSocket:
     @pytest.fixture
     def macos_setup(self, tmp_path, monkeypatch):
         """A setup that believes it is on macOS, with sockets under tmp_path."""
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr("cloudx_proxy.setup.platform.system", lambda: "Darwin")
 
         setup = CloudXSetup(ssh_dir=str(tmp_path / "ssh"), use_1password="Private")
         setup.onepassword_agent_sock = tmp_path / "dot1password" / "agent.sock"
@@ -267,9 +257,7 @@ class TestOnePasswordAgentSocket:
         assert macos_setup.onepassword_agent_sock.is_symlink()
 
     def test_does_nothing_off_macos(self, tmp_path, monkeypatch):
-        import cloudx_proxy.setup as setup_mod
-
-        monkeypatch.setattr(setup_mod.platform, "system", lambda: "Linux")
+        monkeypatch.setattr("cloudx_proxy.setup.platform.system", lambda: "Linux")
         setup = CloudXSetup(ssh_dir=str(tmp_path / "ssh"), use_1password="Private")
 
         assert setup._ensure_onepassword_agent_symlink() is False

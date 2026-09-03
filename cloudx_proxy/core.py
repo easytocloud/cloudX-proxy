@@ -1,5 +1,8 @@
 import logging
 import os
+import platform
+import shutil
+import subprocess
 import sys
 import time
 
@@ -198,9 +201,6 @@ class CloudXProxy:
             logger.info(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
             return
             
-        import platform
-        import subprocess
-        
         try:
             # Build environment with AWS credentials configuration
             env = os.environ.copy()
@@ -208,13 +208,27 @@ class CloudXProxy:
                 env['AWS_CONFIG_FILE'] = os.environ['AWS_CONFIG_FILE']
             if 'AWS_SHARED_CREDENTIALS_FILE' in os.environ:
                 env['AWS_SHARED_CREDENTIALS_FILE'] = os.environ['AWS_SHARED_CREDENTIALS_FILE']
-            
-            # Determine AWS CLI command based on platform
+
+            # Resolve the AWS CLI to a concrete path and run it directly. This
+            # used to pass shell=True on Windows, which hands the whole command
+            # line to cmd.exe: --profile and --region arrive from the SSH
+            # config's ProxyCommand and are not validated, so a shell
+            # metacharacter in either would have been interpreted there.
             aws_cmd = 'aws.exe' if platform.system() == 'Windows' else 'aws'
-            
+            aws_path = shutil.which(aws_cmd) or shutil.which('aws')
+            if aws_path is None:
+                logger.error(
+                    f"'{aws_cmd}' not found on PATH. The AWS CLI is required to open an SSM session."
+                )
+                logger.error(
+                    "Install it from "
+                    "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+                )
+                raise FileNotFoundError(aws_cmd)
+
             # Build command as list (works for both Windows and Unix)
             cmd = [
-                aws_cmd, 'ssm', 'start-session',
+                aws_path, 'ssm', 'start-session',
                 '--target', self.instance_id,
                 '--document-name', 'AWS-StartSSHSession',
                 '--parameters', f'portNumber={self.port}',
@@ -225,24 +239,13 @@ class CloudXProxy:
             logger.debug(f"Running: {' '.join(cmd)}")
 
             # Start AWS CLI process with direct stdin/stdout pass-through
-            try:
-                process = subprocess.Popen(
-                    cmd,
-                    env=env,
-                    stdin=sys.stdin,
-                    stdout=sys.stdout,
-                    stderr=subprocess.PIPE,  # Capture stderr for our logging
-                    shell=platform.system() == 'Windows'  # shell=True only on Windows
-                )
-            except FileNotFoundError:
-                logger.error(
-                    f"'{aws_cmd}' not found. The AWS CLI is required to open an SSM session."
-                )
-                logger.error(
-                    "Install it from "
-                    "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
-                )
-                raise
+            process = subprocess.Popen(
+                cmd,
+                env=env,
+                stdin=sys.stdin,
+                stdout=sys.stdout,
+                stderr=subprocess.PIPE,  # Capture stderr for our logging
+            )
 
             # Relay the AWS CLI's stderr to our logging for the life of the
             # session. Iterating stops at EOF; polling for the exit code inside

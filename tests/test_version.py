@@ -11,7 +11,6 @@ import sys
 import pytest
 
 import cloudx_proxy
-from cloudx_proxy import _resolve_version
 
 
 class TestResolveVersion:
@@ -23,7 +22,7 @@ class TestResolveVersion:
         """A source checkout has no _version.py; installed metadata still does."""
         monkeypatch.setitem(sys.modules, "cloudx_proxy._version", None)
 
-        resolved = _resolve_version()
+        resolved = cloudx_proxy._resolve_version()
 
         assert isinstance(resolved, str)
         assert resolved
@@ -40,7 +39,7 @@ class TestResolveVersion:
 
         monkeypatch.setattr(importlib.metadata, "version", not_found)
 
-        assert _resolve_version() == "0.0.0+unknown"
+        assert cloudx_proxy._resolve_version() == "0.0.0+unknown"
 
     def test_prefers_the_build_time_version(self, monkeypatch):
         import importlib.metadata
@@ -53,7 +52,7 @@ class TestResolveVersion:
         # _version.py is present in this tree (uv sync built it), so this must
         # not reach the metadata fallback at all.
         pytest.importorskip("cloudx_proxy._version")
-        assert _resolve_version()
+        assert cloudx_proxy._resolve_version()
 
 
 class TestVersionInGeneratedConfig:
