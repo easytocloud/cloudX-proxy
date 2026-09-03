@@ -47,41 +47,6 @@ def check_1password_cli() -> tuple:
     except Exception:
         return False, False, ""
 
-def check_ssh_agent(agent_sock_path: str) -> bool:
-    """Check if 1Password SSH agent is running.
-    
-    Args:
-        agent_sock_path: Path to the SSH agent socket
-        
-    Returns:
-        bool: True if agent is running
-    """
-    try:
-        # Check if the socket file exists
-        if not os.path.exists(agent_sock_path):
-            return False
-            
-        # Check if agent is active
-        env = os.environ.copy()
-        env['SSH_AUTH_SOCK'] = agent_sock_path
-        
-        result = subprocess.run(
-            ['ssh-add', '-l'],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=OP_TIMEOUT
-        )
-        
-        if "Could not open a connection to your authentication agent" in result.stderr:
-            return False
-            
-        return True
-        
-    except Exception:
-        return False
-
 def list_ssh_keys() -> list:
     """List SSH keys stored in 1Password.
     

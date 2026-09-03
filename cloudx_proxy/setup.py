@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
+from . import __version__
 from ._1password import (
     OP_TIMEOUT,
     check_1password_cli,
@@ -760,18 +761,6 @@ class CloudXSetup:
                 return True
             return False
 
-    def _get_version(self) -> str:
-        """Get the current version of the cloudx-proxy package.
-        
-        Returns:
-            str: Version string
-        """
-        try:
-            from . import __version__
-            return __version__
-        except (ImportError, AttributeError):
-            return "unknown"
-    
     def _build_proxy_command(self) -> str:
         """Build the ProxyCommand with appropriate parameters.
 
@@ -841,15 +830,6 @@ class CloudXSetup:
             # (IdentitiesOnly is now set globally for all cloudX hosts)
             return f"""    IdentityFile {self.quote_config_value(self.ssh_key_file)}
 """
-
-    def _get_timestamp(self) -> str:
-        """Get a formatted timestamp for configuration comments.
-
-        Returns:
-            str: Formatted timestamp
-        """
-        from datetime import datetime
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Matches the start of an SSH config section. SSH keywords are
     # case-insensitive, so 'host', 'Host' and 'HOST' all open a block.
@@ -1120,8 +1100,7 @@ class CloudXSetup:
         Returns:
             str: Organized SSH config content
         """
-        version = self._get_version()
-        lines = [f"# SSH Configuration - Managed by {self.ssh_host_prefix}-proxy v{version}", ""]
+        lines = [f"# SSH Configuration - Managed by {self.ssh_host_prefix}-proxy v{__version__}", ""]
 
         # Add global section with banner
         if global_config:
@@ -1325,35 +1304,6 @@ class CloudXSetup:
             bool: True if pattern exists in configuration
         """
         return f"Host {pattern}" in current_config
-    
-    def _extract_host_config(self, pattern: str, current_config: str) -> Tuple[str, str]:
-        """Extract a host configuration block from the current config.
-        
-        Args:
-            pattern: Host pattern to extract (e.g., 'cloudx-*', 'cloudx-dev-*')
-            current_config: Current SSH config content
-            
-        Returns:
-            Tuple[str, str]: Extracted host configuration, remaining configuration
-        """
-        lines = current_config.splitlines()
-        host_config_lines = []
-        remaining_lines = []
-        in_host_block = False
-        
-        for line in lines:
-            if line.strip() == f"Host {pattern}":
-                in_host_block = True
-                host_config_lines.append(line)
-            elif in_host_block and line.strip().startswith("Host "):
-                in_host_block = False
-                remaining_lines.append(line)
-            elif in_host_block:
-                host_config_lines.append(line)
-            else:
-                remaining_lines.append(line)
-                
-        return "\n".join(host_config_lines), "\n".join(remaining_lines)
     
     def _add_host_entry(self, cloudx_env: str, instance_id: str, hostname: str, current_config: str) -> bool:
         """Add/update host entry and reorganize config file.
@@ -1615,22 +1565,6 @@ class CloudXSetup:
         
         return True, updated_config
         
-    def _check_and_create_environment_config(self, cloudx_env: str, current_config: str) -> Tuple[bool, str]:
-        """Check if environment configuration exists and create it if needed.
-        
-        Args:
-            cloudx_env: CloudX environment
-            current_config: Current SSH config content
-            
-        Returns:
-            Tuple[bool, str]: Success flag, Updated configuration
-        """
-        pattern = f"{self.ssh_host_prefix}-{cloudx_env}-*"
-        # Environment config is now handled by _add_host_entry which parses and reorganizes
-        # the entire config file. No need to prompt here.
-        self.print_status(f"Environment config for {pattern} will be added/updated via host entries", None, 2)
-        return True, current_config
-
     @staticmethod
     def _insert_include_line(content: str, include_line: str) -> str:
         """Place an Include directive above the first Host/Match block.
@@ -1751,12 +1685,9 @@ class CloudXSetup:
             if not success:
                 return False
             
-            # 2. Check and create environment config
-            self.print_status("Checking environment configuration...", None, 2)
-            success, current_config = self._check_and_create_environment_config(cloudx_env, current_config)
-            if not success:
-                return False
-                
+            # 2. The environment tier is created by _add_host_entry below, which
+            # parses and reorganizes the whole file
+
             # Write the updated config with generic and environment tiers
             self.ssh_config_file.parent.mkdir(parents=True, exist_ok=True)
             self.ssh_config_file.write_text(current_config)
