@@ -56,7 +56,7 @@ class CloudXSetup:
     SSH_NAME_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 
     @classmethod
-    def validate_ssh_name(cls, name: str) -> bool:
+    def validate_ssh_name(cls, name: str | None) -> bool:
         """Validate a name that is written into the SSH configuration.
 
         Environment names and hostnames become part of a 'Host' line, and the
@@ -65,7 +65,8 @@ class CloudXSetup:
         the meaning of the generated config.
 
         Args:
-            name: Environment name or hostname to validate
+            name: Environment name or hostname to validate; None and empty are
+                invalid, since a prompt with no default yields them
 
         Returns:
             bool: True if valid, False otherwise
@@ -985,10 +986,44 @@ class CloudXSetup:
             cleaned.append(line.rstrip())
         return cleaned
 
-    @staticmethod
-    def _raw_block_lines(block: dict) -> list:
+    # A banner this tool generates: a rule line, a title line, a rule line
+    _BANNER_RULE_RE = re.compile(r'^#\s*={10,}\s*$')
+
+    @classmethod
+    def _strip_generated_banners(cls, lines: list) -> list:
+        """Remove banners this tool wrote, so rewrites don't stack them up.
+
+        A preserved block keeps the comments written above it, but the section
+        banner we emit above the unmanaged section is one of those comments on
+        the next read. Without this it would be re-emitted on every rewrite and
+        the file would grow each time cleanup ran.
+
+        Args:
+            lines: Lines that may contain a generated banner
+
+        Returns:
+            list: The lines with any generated banner removed
+        """
+        result = []
+        index = 0
+        while index < len(lines):
+            is_banner = (
+                index + 2 < len(lines)
+                and cls._BANNER_RULE_RE.match(lines[index])
+                and lines[index + 1].strip().startswith('#')
+                and cls._BANNER_RULE_RE.match(lines[index + 2])
+            )
+            if is_banner:
+                index += 3
+                continue
+            result.append(lines[index])
+            index += 1
+        return result
+
+    @classmethod
+    def _raw_block_lines(cls, block: dict) -> list:
         """Return an unmanaged block verbatim, including the comments above it."""
-        lines = list(block['leading']) + list(block['lines'])
+        lines = cls._strip_generated_banners(list(block['leading'])) + list(block['lines'])
         while lines and not lines[0].strip():
             lines.pop(0)
         while lines and not lines[-1].strip():
@@ -1027,6 +1062,8 @@ class CloudXSetup:
         - 'version': Version header line (if present)
         - 'global': Global Host cloudX-* section
         - 'environments': Dict with lowercased environment name -> {pattern, name, lines}
+        - 'preamble': Directives above the first Host/Match block, which apply
+          to every host and must stay above them, kept verbatim
         - 'other': Blocks cloudx-proxy does not manage, kept verbatim so a
           rewrite never discards them
 
@@ -1040,6 +1077,7 @@ class CloudXSetup:
             'version': None,
             'global': None,
             'environments': {},
+            'preamble': [],
             'other': []
         }
 
@@ -1061,12 +1099,21 @@ class CloudXSetup:
             if result['version']:
                 break
 
-        if result['version'] and result['version'] in (
-            line.strip() for line in leading_of_first
-        ):
-            blocks[0]['leading'] = [
-                line for line in leading_of_first if line.strip() != result['version']
-            ]
+        if result['version']:
+            if blocks:
+                blocks[0]['leading'] = [
+                    line for line in leading_of_first if line.strip() != result['version']
+                ]
+            preamble = [line for line in preamble if line.strip() != result['version']]
+
+        # Directives above the first Host/Match block apply to every host, so
+        # they have to be kept, and kept above the blocks: moved below one they
+        # would silently narrow to whichever host came last.
+        result['preamble'] = self._strip_generated_banners(preamble)
+        while result['preamble'] and not result['preamble'][0].strip():
+            result['preamble'].pop(0)
+        while result['preamble'] and not result['preamble'][-1].strip():
+            result['preamble'].pop()
 
         prefix = self.ssh_host_prefix
         global_pattern = f"{prefix}-*".lower()
@@ -1157,7 +1204,8 @@ class CloudXSetup:
         return result
 
     def _organize_ssh_config(self, global_config: str, environments: dict,
-                             other_blocks: list | None = None) -> str:
+                             other_blocks: list | None = None,
+                             preamble: list | None = None) -> str:
         """Organize SSH config with proper structure and banners.
 
         Args:
@@ -1165,11 +1213,18 @@ class CloudXSetup:
             environments: Dict of environment_name -> {pattern, lines}
             other_blocks: Blocks not managed by cloudx-proxy, each a list of
                 raw lines, appended verbatim so a rewrite never loses them
+            preamble: Directives that appeared above the first Host block; they
+                apply to every host, so they are written back above them
 
         Returns:
             str: Organized SSH config content
         """
         lines = [f"# SSH Configuration - Managed by {self.ssh_host_prefix}-proxy v{__version__}", ""]
+
+        # Anything above the first Host block stays above it
+        if preamble:
+            lines.extend(preamble)
+            lines.append("")
 
         # Add global section with banner
         if global_config:
@@ -1441,7 +1496,8 @@ class CloudXSetup:
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
                 parsed['environments'],
-                parsed['other']
+                parsed['other'],
+                parsed['preamble']
             )
 
             # Write organized config
@@ -1544,7 +1600,8 @@ class CloudXSetup:
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
                 parsed['environments'],
-                parsed['other']
+                parsed['other'],
+                parsed['preamble']
             )
 
             # This is a full rewrite, so keep a copy of what was there before

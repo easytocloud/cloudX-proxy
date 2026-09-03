@@ -335,3 +335,136 @@ Host cloudx-dev-web*
 
         assert len(parsed["other"]) == 1
         assert "Host cloudx-dev-web*" in parsed["other"][0]
+
+
+class TestPreambleDirectives:
+    """Directives above the first Host block apply to every host.
+
+    They were dropped entirely by the rewrite - the same data-loss class this
+    module exists to prevent, one level up from the Host blocks. They also
+    cannot simply be appended: below a Host block they would silently narrow to
+    whichever host came last.
+    """
+
+    PREAMBLE = """ServerAliveInterval 60
+StrictHostKeyChecking ask
+
+""" + MANAGED
+
+    def test_top_level_directives_survive_cleanup(self, setup):
+        write_config(setup, self.PREAMBLE)
+
+        assert setup.cleanup_config() is True
+
+        result = setup.ssh_config_file.read_text()
+        assert "ServerAliveInterval 60" in result
+        assert "StrictHostKeyChecking ask" in result
+
+    def test_they_stay_above_the_first_host_block(self, setup):
+        write_config(setup, self.PREAMBLE)
+        setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        assert result.index("ServerAliveInterval") < result.index("Host cloudx-*")
+
+    def test_comments_above_them_are_kept(self, setup):
+        write_config(setup, "# my global defaults\nServerAliveInterval 60\n\n" + MANAGED)
+        setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        assert "# my global defaults" in result
+
+    def test_the_managed_by_header_is_not_duplicated_into_the_preamble(self, setup):
+        write_config(
+            setup,
+            "# SSH Configuration - Managed by cloudx-proxy v0.17.1\n\n"
+            "ServerAliveInterval 60\n\n" + MANAGED,
+        )
+        setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        assert result.count("Managed by cloudx-proxy") == 1
+
+    def test_parse_exposes_the_preamble(self, setup):
+        parsed = setup._parse_ssh_config(self.PREAMBLE)
+
+        assert "ServerAliveInterval 60" in parsed["preamble"]
+        assert "StrictHostKeyChecking ask" in parsed["preamble"]
+
+
+class TestRewritesAreStableWithUnmanagedContent:
+    """The generated section banner is a comment on the next read.
+
+    Kept as one of the preserved block's leading comments it was re-emitted on
+    every rewrite, so the file grew each time cleanup ran.
+    """
+
+    WITH_FOREIGN = MANAGED + """
+# my jump box
+Host bastion
+    HostName 10.0.0.1
+
+Match host *.internal
+    ForwardAgent yes
+"""
+
+    def test_banner_is_not_duplicated_across_runs(self, setup):
+        write_config(setup, self.WITH_FOREIGN)
+
+        counts = []
+        for _ in range(3):
+            setup.cleanup_config()
+            counts.append(setup.ssh_config_file.read_text().count("NOT MANAGED"))
+
+        assert counts == [1, 1, 1], f"banner accumulated: {counts}"
+
+    def test_repeated_cleanup_is_byte_stable(self, setup):
+        write_config(setup, self.WITH_FOREIGN)
+
+        setup.cleanup_config()
+        first = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+        second = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+        third = setup.ssh_config_file.read_text()
+
+        assert first == second == third
+
+    def test_preserved_content_survives_repeated_runs(self, setup):
+        write_config(setup, self.WITH_FOREIGN)
+
+        for _ in range(3):
+            setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        for kept in ("# my jump box", "Host bastion", "Match host *.internal", "ForwardAgent yes"):
+            assert kept in result
+
+    def test_preamble_and_unmanaged_together_are_stable(self, setup):
+        write_config(setup, "ServerAliveInterval 60\n\n" + self.WITH_FOREIGN)
+
+        setup.cleanup_config()
+        first = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+
+        assert setup.ssh_config_file.read_text() == first
+        assert "ServerAliveInterval 60" in first
+        assert first.count("NOT MANAGED") == 1
+
+
+class TestStripGeneratedBanners:
+    def test_removes_a_generated_banner(self, setup):
+        lines = [
+            "# " + "=" * 78,
+            "#  NOT MANAGED BY cloudx-proxy - PRESERVED AS-IS",
+            "# " + "=" * 78,
+            "",
+            "# a real comment",
+        ]
+
+        assert setup._strip_generated_banners(lines) == ["", "# a real comment"]
+
+    def test_keeps_ordinary_comments(self, setup):
+        lines = ["# one", "# two", "# three"]
+
+        assert setup._strip_generated_banners(lines) == lines
