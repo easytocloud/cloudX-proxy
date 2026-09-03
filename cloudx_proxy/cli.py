@@ -46,30 +46,6 @@ def short_host_name(host: str, host_prefix: str) -> str:
     return host
 
 
-class OptionalValueOption(click.Option):
-    """Click option that allows an optional value (e.g., --flag or --flag value)."""
-
-    def __init__(self, *args, **kwargs):
-        _flag_value = kwargs.pop("flag_value", None)
-        if _flag_value is None:
-            raise ValueError("flag_value is required for OptionalValueOption")
-        if kwargs.get('nargs', 1) != 1:
-            raise ValueError("OptionalValueOption only supports nargs=1")
-
-        # Force Click to treat this as a regular option (so it can take a value)
-        kwargs.setdefault('is_flag', False)
-        kwargs['flag_value'] = _flag_value
-
-        super().__init__(*args, **kwargs)
-
-        # Ensure Click knows this flag may omit its value and fall back to flag_value
-        self._flag_needs_value = True
-        self.flag_value = _flag_value
-        self._flag_default = _flag_value
-
-
-
-
 @click.group()
 @click.version_option(version=__version__)
 def cli():
@@ -166,7 +142,9 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option(
     '--1password',
     'use_1password',
-    cls=OptionalValueOption,
+    # Click's optional-value form: absent -> None, bare -> flag_value,
+    # given a value -> that value
+    is_flag=False,
     flag_value='Private',
     default=None,
     metavar='[VAULT]',
