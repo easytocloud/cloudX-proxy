@@ -281,6 +281,27 @@ class CloudXSetup:
                     self.print_status("1Password agent symlink already points to default location", True, 2)
                     return True
 
+                if not self.onepassword_agent_sock.is_symlink():
+                    # Not a symlink: 1Password can be configured to put its
+                    # agent here directly, so this may be a live socket. Do not
+                    # delete someone's running agent without being told to.
+                    self.print_status(
+                        f"{self.onepassword_agent_sock} exists and is not a symlink", False, 2
+                    )
+                    self.print_status(
+                        "A running 1Password agent may be listening on it", None, 2
+                    )
+                    if self.non_interactive:
+                        self.print_status(
+                            "Refusing to replace it in non-interactive mode", False, 2
+                        )
+                        return False
+                    if self.prompt(
+                        "Replace it with a symlink to the macOS agent socket?", "N"
+                    ).lower() != 'y':
+                        self.print_status("Leaving the existing socket in place", None, 2)
+                        return False
+
                 self.print_status("Replacing existing 1Password agent socket entry", None, 2)
                 self.onepassword_agent_sock.unlink(missing_ok=True)
 

@@ -188,3 +188,88 @@ class TestSshProbeIsNonInteractive:
         assert "StrictHostKeyChecking=accept-new" in cmd
         assert cmd[-2:] == ["cloudx-dev-web1", "exit"]
         assert captured["kwargs"]["timeout"] > 0
+
+
+class TestOnePasswordAgentSocket:
+    """~/.1password/agent.sock was replaced without asking.
+
+    1Password can be configured to place its agent socket there directly, so
+    the path is not necessarily a stale symlink of ours: deleting it breaks a
+    running agent until 1Password is restarted.
+    """
+
+    @pytest.fixture
+    def macos_setup(self, tmp_path, monkeypatch):
+        """A setup that believes it is on macOS, with sockets under tmp_path."""
+        import cloudx_proxy.setup as setup_mod
+
+        monkeypatch.setattr(setup_mod.platform, "system", lambda: "Darwin")
+
+        setup = CloudXSetup(ssh_dir=str(tmp_path / "ssh"), use_1password="Private")
+        setup.onepassword_agent_sock = tmp_path / "dot1password" / "agent.sock"
+        setup.onepassword_agent_sock_macos = tmp_path / "groupcontainers" / "agent.sock"
+        setup.onepassword_agent_sock_macos.parent.mkdir(parents=True, exist_ok=True)
+        setup.onepassword_agent_sock_macos.write_text("")  # stand-in for the socket
+        return setup
+
+    def test_creates_the_symlink_when_nothing_is_there(self, macos_setup):
+        assert macos_setup._ensure_onepassword_agent_symlink() is True
+        assert macos_setup.onepassword_agent_sock.is_symlink()
+        assert (
+            macos_setup.onepassword_agent_sock.resolve()
+            == macos_setup.onepassword_agent_sock_macos.resolve()
+        )
+
+    def test_correct_symlink_is_left_alone(self, macos_setup):
+        macos_setup.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+        macos_setup.onepassword_agent_sock.symlink_to(macos_setup.onepassword_agent_sock_macos)
+
+        assert macos_setup._ensure_onepassword_agent_symlink() is True
+        assert macos_setup.onepassword_agent_sock.is_symlink()
+
+    def test_wrong_symlink_is_relinked(self, macos_setup, tmp_path):
+        elsewhere = tmp_path / "elsewhere.sock"
+        elsewhere.write_text("")
+        macos_setup.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+        macos_setup.onepassword_agent_sock.symlink_to(elsewhere)
+
+        assert macos_setup._ensure_onepassword_agent_symlink() is True
+        assert (
+            macos_setup.onepassword_agent_sock.resolve()
+            == macos_setup.onepassword_agent_sock_macos.resolve()
+        )
+
+    def test_real_socket_is_not_deleted_non_interactively(self, macos_setup):
+        macos_setup.non_interactive = True
+        macos_setup.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+        macos_setup.onepassword_agent_sock.write_text("a live agent may be here")
+
+        assert macos_setup._ensure_onepassword_agent_symlink() is False
+        assert not macos_setup.onepassword_agent_sock.is_symlink()
+        assert macos_setup.onepassword_agent_sock.read_text() == "a live agent may be here"
+
+    def test_real_socket_is_kept_when_the_user_declines(self, macos_setup, monkeypatch):
+        macos_setup.non_interactive = False
+        macos_setup.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+        macos_setup.onepassword_agent_sock.write_text("a live agent may be here")
+        monkeypatch.setattr("builtins.input", lambda prompt="": "")  # default is No
+
+        assert macos_setup._ensure_onepassword_agent_symlink() is False
+        assert macos_setup.onepassword_agent_sock.read_text() == "a live agent may be here"
+
+    def test_real_socket_is_replaced_when_the_user_agrees(self, macos_setup, monkeypatch):
+        macos_setup.non_interactive = False
+        macos_setup.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+        macos_setup.onepassword_agent_sock.write_text("stale")
+        monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+
+        assert macos_setup._ensure_onepassword_agent_symlink() is True
+        assert macos_setup.onepassword_agent_sock.is_symlink()
+
+    def test_does_nothing_off_macos(self, tmp_path, monkeypatch):
+        import cloudx_proxy.setup as setup_mod
+
+        monkeypatch.setattr(setup_mod.platform, "system", lambda: "Linux")
+        setup = CloudXSetup(ssh_dir=str(tmp_path / "ssh"), use_1password="Private")
+
+        assert setup._ensure_onepassword_agent_symlink() is False
