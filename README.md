@@ -440,8 +440,9 @@ Options:
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
 - `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
-- `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values.
-- `--dry-run` (flag): Preview setup changes without actually executing them. Useful for testing configurations before applying them.
+- `--environment` (optional): cloudX environment (e.g. `dev`, `pre-prod`). If not provided, it is taken from the instance's `Name` tag (`cloudX-{env}-{hostname}`), then from the AWS user name. Required with `--yes` when neither is available.
+- `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values. Unlike interactive mode, a failure is never continued past: setup reports the error and exits non-zero rather than carrying on.
+- `--dry-run` (flag): Preview setup changes without actually executing them. Makes no AWS calls and writes no files, so it works without credentials.
 
 Example usage:
 ```bash

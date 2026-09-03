@@ -174,11 +174,13 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 )
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
+@click.option('--environment', help='cloudX environment (default: from the instance Name tag)')
 @click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
 def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, use_1password: str,
-          instance: str, hostname: str, ssh_host_prefix: str, non_interactive: bool, dry_run: bool):
+          instance: str, hostname: str, environment: str, ssh_host_prefix: str,
+          non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     \b
@@ -198,6 +200,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
     cloudx-proxy setup --1password
     cloudx-proxy setup --1password Work
     cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+    cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --environment dev --yes --dry-run
     """
     try:
         # Determine default prefix based on command name if not provided
@@ -264,12 +267,24 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             sys.exit(1)
 
         # Fetch instance tags to get environment and hostname defaults
-        setup.print_status("Fetching instance tags...", None, 2)
+        # (skipped under --dry-run, which must not call AWS)
         tag_env, tag_hostname = setup.get_instance_tags(instance_id)
 
-        # Use environment from tag, fall back to AWS user default, or prompt
-        env_default = tag_env or getattr(setup, 'default_env', None)
-        cloudx_env = setup.prompt("Enter environment", env_default)
+        # Environment: --environment wins, then the Name tag, then the AWS user
+        if environment:
+            setup.print_status(f"Using provided environment: {environment}", True, 2)
+            cloudx_env = environment
+        else:
+            env_default = tag_env or getattr(setup, 'default_env', None)
+            if non_interactive and not env_default:
+                setup.print_status("Could not determine the environment", False, 2)
+                setup.print_status(
+                    "Pass --environment, or tag the instance 'cloudX-{env}-{hostname}'",
+                    None,
+                    2
+                )
+                sys.exit(1)
+            cloudx_env = setup.prompt("Enter environment", env_default)
 
         # Reuse the case already in the SSH config so 'Dev' does not create a
         # second section beside an existing 'dev' one

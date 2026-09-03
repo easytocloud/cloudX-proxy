@@ -122,6 +122,16 @@ class CloudXSetup:
         Returns:
             Tuple[Optional[str], Optional[str]]: (environment, hostname) or (None, None) on failure
         """
+        if self.dry_run:
+            self.print_status(
+                f"[DRY RUN] Would fetch tags for {instance_id} to derive environment and hostname",
+                None,
+                2
+            )
+            return None, None
+
+        self.print_status("Fetching instance tags...", None, 2)
+
         try:
             # Configure AWS environment if specified
             if self.aws_env:
@@ -299,6 +309,33 @@ class CloudXSetup:
         """
         prefix = " " * indent
         print(f"{prefix}{status_symbol(status)} {message}")
+
+    def confirm_continue_after_error(self, context: str) -> bool:
+        """Ask whether to carry on after a failure, or give up if nobody can answer.
+
+        Recovery prompts default to "yes", which is right when a person is
+        watching and can judge the damage. In non-interactive mode there is
+        nobody to ask, and answering on the user's behalf turns a failure into
+        a successful-looking run: setup reports success and exits 0 having
+        written nothing. Fail instead, so the caller sees what happened.
+
+        Args:
+            context: Short description of what went wrong, for the message
+
+        Returns:
+            bool: True to continue, False to abort
+        """
+        if self.non_interactive:
+            self.print_status(
+                f"Cannot continue past {context} in non-interactive mode", False, 2
+            )
+            return False
+
+        if self.prompt("Would you like to continue anyway?", "Y").lower() == 'n':
+            return False
+
+        self.print_status(f"Continuing setup despite {context}", None, 2)
+        return True
 
     def prompt(self, message: str, default: str = None) -> str:
         """Display a colored prompt for user input.
@@ -697,6 +734,19 @@ class CloudXSetup:
                 # Always prefer to create keys in 1Password
                 return self._create_1password_key()
             else:
+                # 1Password was asked for explicitly. Falling back to an
+                # on-disk key changes the authentication mechanism, so in
+                # non-interactive mode say so rather than quietly substituting
+                # one and reporting success.
+                if self.non_interactive:
+                    self.print_status(
+                        "1Password was requested but is not available; "
+                        "refusing to fall back to an on-disk key in non-interactive mode",
+                        False,
+                        2
+                    )
+                    return False
+
                 proceed = self.prompt("1Password integration not available. Continue with standard SSH key setup?", "Y").lower() != "n"
                 if not proceed:
                     return False
@@ -755,11 +805,7 @@ class CloudXSetup:
 
         except Exception as e:
             self.print_status(f"Error: {str(e)}", False, 2)
-            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-            if continue_setup:
-                self.print_status("Continuing setup despite SSH key issues", None, 2)
-                return True
-            return False
+            return self.confirm_continue_after_error("SSH key issues")
 
     def _build_proxy_command(self) -> str:
         """Build the ProxyCommand with appropriate parameters.
@@ -1392,11 +1438,7 @@ class CloudXSetup:
 
         except Exception as e:
             self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
-            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-            if continue_setup:
-                self.print_status("Continuing setup despite SSH config issues", None, 2)
-                return True
-            return False
+            return self.confirm_continue_after_error("SSH config issues")
 
     def cleanup_config(self) -> bool:
         """Clean up and reorganize SSH configuration file.
@@ -1768,11 +1810,7 @@ class CloudXSetup:
 
         except Exception as e:
             self.print_status(f"{color_error('Error:', bold=True)} {str(e)}", False, 2)
-            continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-            if continue_setup:
-                self.print_status("Continuing setup despite SSH config issues", None, 2)
-                return True
-            return False
+            return self.confirm_continue_after_error("SSH config issues")
 
     def check_instance_setup(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
         """Check if instance is accessible via SSH.
@@ -1881,11 +1919,7 @@ class CloudXSetup:
             attempts += 1
         
         self.print_status("Timeout waiting for SSH access", False, 2)
-        continue_setup = self.prompt("Would you like to continue anyway?", "Y").lower() != 'n'
-        if continue_setup:
-            self.print_status("Continuing setup despite SSH access issues", None, 2)
-            return True
-        return False
+        return self.confirm_continue_after_error("SSH access issues")
 
     def migrate_to_cloudx(self, target_dir: Path = None) -> bool:
         """Migrate from ~/.ssh/vscode to ~/.ssh/cloudX (or specified target).
