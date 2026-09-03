@@ -731,13 +731,135 @@ class CloudXSetup:
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Matches the start of an SSH config section. SSH keywords are
+    # case-insensitive, so 'host', 'Host' and 'HOST' all open a block.
+    _SECTION_KEYWORD_RE = re.compile(r'^\s*(host|match)\s+(.*)$', re.IGNORECASE)
+
+    def _split_config_blocks(self, config_content: str) -> Tuple[list, list, list]:
+        """Split an SSH config into a preamble and Host/Match blocks.
+
+        Comment and blank lines that trail a block are held back and attached to
+        the block that follows them, so a comment written above a Host entry
+        travels with that entry (and so the generated banners, which always sit
+        above the section they label, are dropped along with it).
+
+        Args:
+            config_content: SSH config file content
+
+        Returns:
+            Tuple[list, list, list]: (preamble lines, blocks, trailing lines),
+            where each block is a dict with 'keyword', 'value', 'lines' (raw,
+            starting with the header line) and 'leading' (comments above it).
+        """
+        preamble = []
+        blocks = []
+        current = None
+        pending = []  # comment/blank lines awaiting the next directive or block
+
+        for line in config_content.split('\n'):
+            match = self._SECTION_KEYWORD_RE.match(line)
+            if match:
+                if current is not None:
+                    blocks.append(current)
+                current = {
+                    'keyword': match.group(1).lower(),
+                    'value': match.group(2).strip(),
+                    'lines': [line],
+                    'leading': pending,
+                }
+                pending = []
+                continue
+
+            if not line.strip() or line.strip().startswith('#'):
+                pending.append(line)
+                continue
+
+            # A directive belongs to the open block, along with anything that
+            # was buffered inside that block.
+            target = current['lines'] if current is not None else preamble
+            target.extend(pending)
+            target.append(line)
+            pending = []
+
+        if current is not None:
+            blocks.append(current)
+        else:
+            preamble.extend(pending)
+            pending = []
+
+        return preamble, blocks, pending
+
+    @staticmethod
+    def _clean_managed_lines(lines: list) -> list:
+        """Strip comments and blank lines from a block cloudx-proxy manages.
+
+        The header line is kept verbatim so inline comments on Host entries
+        survive; everything below it is normalised, since those sections are
+        regenerated from scratch on every write.
+
+        Args:
+            lines: Raw lines of the block, header first
+
+        Returns:
+            list: Cleaned lines
+        """
+        cleaned = []
+        for index, line in enumerate(lines):
+            if index == 0:
+                cleaned.append(line.rstrip())
+                continue
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if '#' in line:
+                line = line.split('#')[0].rstrip()
+            cleaned.append(line.rstrip())
+        return cleaned
+
+    @staticmethod
+    def _raw_block_lines(block: dict) -> list:
+        """Return an unmanaged block verbatim, including the comments above it."""
+        lines = list(block['leading']) + list(block['lines'])
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return lines
+
+    def _environment_for_host(self, host_name: str, env_names: list) -> Optional[str]:
+        """Determine which environment a host entry belongs to.
+
+        Environment names may contain hyphens (e.g. 'pre-prod'), which makes
+        '<prefix>-<env>-<hostname>' ambiguous. Environments already declared in
+        the config therefore win, longest name first; only when none matches is
+        the first segment after the prefix used.
+
+        Args:
+            host_name: Host entry name (e.g. 'cloudx-pre-prod-web1')
+            env_names: Known environment names, sorted longest first
+
+        Returns:
+            Optional[str]: Environment name, or None if the host doesn't fit
+        """
+        lowered = host_name.lower()
+        for env_name in env_names:
+            if lowered.startswith(f"{self.ssh_host_prefix}-{env_name}-".lower()):
+                return env_name
+
+        match = re.match(
+            rf'^{re.escape(self.ssh_host_prefix)}-([^-]+)-.+$', host_name, re.IGNORECASE
+        )
+        return match.group(1) if match else None
+
     def _parse_ssh_config(self, config_content: str) -> dict:
         """Parse SSH config into structured sections.
 
         Returns a dict with:
         - 'version': Version header line (if present)
         - 'global': Global Host cloudX-* section
-        - 'environments': Dict with environment name -> {pattern, lines}
+        - 'environments': Dict with lowercased environment name -> {pattern, name, lines}
+        - 'other': Blocks cloudx-proxy does not manage, kept verbatim so a
+          rewrite never discards them
 
         Args:
             config_content: SSH config file content
@@ -748,132 +870,132 @@ class CloudXSetup:
         result = {
             'version': None,
             'global': None,
-            'environments': {}
+            'environments': {},
+            'other': []
         }
 
-        lines = config_content.split('\n')
-        i = 0
+        preamble, blocks, trailing = self._split_config_blocks(config_content)
 
-        # Extract version header
-        while i < len(lines) and lines[i].strip().startswith('#'):
-            if 'Managed by cloudX-proxy' in lines[i] or 'SSH Configuration' in lines[i]:
-                result['version'] = lines[i].strip()
-                i += 1
+        # Extract version header. It sits above the first block, so it is held
+        # in that block's leading comments rather than in the preamble; drop it
+        # there too, otherwise a rewrite would emit it twice when the first
+        # block happens to be one we don't manage.
+        leading_of_first = blocks[0]['leading'] if blocks else []
+        for source in (preamble, leading_of_first):
+            for line in source:
+                stripped = line.strip()
+                if stripped.startswith('#') and (
+                    'Managed by' in stripped or 'SSH Configuration' in stripped
+                ):
+                    result['version'] = stripped
+                    break
+            if result['version']:
                 break
-            i += 1
 
-        # First pass: extract all Host entries and their properties
-        host_entries = {}  # hostname -> config_lines
-        env_patterns = {}  # env_pattern -> config_lines
-        current_host = None
-        current_config = []
-        global_config = None
+        if result['version'] and result['version'] in (
+            line.strip() for line in leading_of_first
+        ):
+            blocks[0]['leading'] = [
+                line for line in leading_of_first if line.strip() != result['version']
+            ]
 
-        for line in lines[i:]:
-            # Skip standalone comment lines and banners (but keep inline comments on Host lines)
-            if line.strip().startswith('#') and not line.startswith('Host '):
+        prefix = self.ssh_host_prefix
+        global_pattern = f"{prefix}-*".lower()
+        env_pattern_re = re.compile(rf'^{re.escape(prefix)}-(.+)-\*$', re.IGNORECASE)
+
+        managed_hosts = []  # (host_name, block) resolved after environments are known
+        unmanaged = []
+
+        # First pass: global section and environment patterns. Environment
+        # patterns have to be collected before host entries, because they are
+        # what makes a hyphenated environment name unambiguous.
+        for block in blocks:
+            name = block['value'].split('#')[0].strip()
+
+            # Match blocks, multi-pattern Host lines and anything not carrying
+            # our prefix belong to the user, not to us.
+            if block['keyword'] != 'host' or not name or len(name.split()) > 1:
+                unmanaged.append(block)
                 continue
 
-            # Skip empty lines unless we're collecting config
-            if not line.strip():
-                if current_host and current_config:
-                    current_config.append(line)
+            if name.lower() == global_pattern:
+                if result['global'] is None:
+                    result['global'] = '\n'.join(
+                        self._clean_managed_lines(block['lines'])
+                    ).strip()
                 continue
 
-            # Host line
-            if line.startswith('Host '):
-                # Save previous host if exists
-                if current_host:
-                    if current_host.endswith('*'):
-                        env_patterns[current_host] = current_config
-                    else:
-                        host_entries[current_host] = current_config
-                    current_config = []
+            env_match = env_pattern_re.match(name)
+            if env_match:
+                env_name_original = env_match.group(1)  # Preserve original case
+                env_name_key = env_name_original.lower()  # Lowercase for case-insensitive matching
+                if env_name_key in result['environments']:
+                    continue  # Duplicate environment pattern: first one wins
+                result['environments'][env_name_key] = {
+                    'pattern': f"{prefix}-{env_name_original}-*",
+                    'name': env_name_original,  # Store original case for display
+                    'lines': self._clean_managed_lines(block['lines'])
+                }
+                continue
 
-                # Preserve the full Host line (including inline comments after #)
-                current_host = line.replace('Host ', '', 1).strip()
+            if name.lower().startswith(f"{prefix}-".lower()) and '*' not in name:
+                managed_hosts.append((name, block))
+                continue
 
-                # For pattern matching, extract just the hostname/pattern without comments
-                hostname_only = current_host.split('#')[0].strip()
+            unmanaged.append(block)
 
-                # Global section
-                if hostname_only == f"{self.ssh_host_prefix}-*":
-                    global_config = [line]
-                    current_host = None
-                else:
-                    current_host = hostname_only  # Store without inline comment for dedup/matching
-                    current_config = [line]  # Store full line with comment
-            # Config content
-            else:
-                if current_host:
-                    # Strip inline comments from config directives (not Host lines)
-                    if '#' in line and not line.strip().startswith('#'):
-                        line = line.split('#')[0].rstrip()
-                    current_config.append(line)
-                elif global_config is not None:
-                    # Strip inline comments from global config too
-                    if '#' in line and not line.strip().startswith('#'):
-                        line = line.split('#')[0].rstrip()
-                    global_config.append(line)
-
-        # Save last entry
-        if current_host:
-            if current_host.endswith('*'):
-                env_patterns[current_host] = current_config
-            else:
-                host_entries[current_host] = current_config
-
-        # Second pass: organize environment patterns and host entries
+        # Second pass: attach host entries to their environment
+        env_names = sorted(
+            (env_data['name'] for env_data in result['environments'].values()),
+            key=len,
+            reverse=True
+        )
         seen_hosts = set()  # Track seen hosts to avoid duplicates
 
-        # First, add all environment patterns
-        for env_pattern, config_lines in env_patterns.items():
-            env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-\*', env_pattern, re.IGNORECASE)
-            if env_match:
-                env_name_original = env_match.group(1)  # Preserve original case
-                env_name_key = env_name_original.lower()  # Lowercase for dict key (case-insensitive matching)
+        for host_name, block in managed_hosts:
+            env_name_original = self._environment_for_host(host_name, env_names)
+            if not env_name_original:
+                unmanaged.append(block)
+                continue
+
+            # Skip duplicates
+            if host_name.lower() in seen_hosts:
+                continue
+            seen_hosts.add(host_name.lower())
+
+            env_name_key = env_name_original.lower()
+
+            # Create environment if not exists (a host without its pattern)
+            if env_name_key not in result['environments']:
                 result['environments'][env_name_key] = {
-                    'pattern': env_pattern,
+                    'pattern': f"{prefix}-{env_name_original}-*",
                     'name': env_name_original,  # Store original case for display
-                    'lines': config_lines
+                    'lines': [f"Host {prefix}-{env_name_original}-*"]
                 }
 
-        # Then, add host entries to their environments
-        for host_key, config_lines in host_entries.items():
-            # Extract environment from hostname
-            env_match = re.match(rf'{re.escape(self.ssh_host_prefix)}-(\w+)-', host_key, re.IGNORECASE)
-            if env_match:
-                env_name_original = env_match.group(1)  # Preserve original case
-                env_name_key = env_name_original.lower()  # Lowercase for dict key
+            # Add host entry
+            result['environments'][env_name_key]['lines'].extend(
+                self._clean_managed_lines(block['lines'])
+            )
 
-                # Skip duplicates
-                if host_key in seen_hosts:
-                    continue
-                seen_hosts.add(host_key)
-
-                # Create environment if not exists (shouldn't happen, but handle it)
-                if env_name_key not in result['environments']:
-                    result['environments'][env_name_key] = {
-                        'pattern': f"{self.ssh_host_prefix}-{env_name_original}-*",
-                        'name': env_name_original,  # Store original case for display
-                        'lines': [f"Host {self.ssh_host_prefix}-{env_name_original}-*"]
-                    }
-
-                # Add host entry
-                result['environments'][env_name_key]['lines'].extend(config_lines)
-
-        # Store global config
-        if global_config:
-            result['global'] = '\n'.join(global_config).strip()
+        # Preserve unmanaged blocks in their original order, plus any comment
+        # left at the end of the file.
+        result['other'] = [self._raw_block_lines(block) for block in unmanaged]
+        trailing_comments = [line for line in trailing if line.strip()]
+        if trailing_comments:
+            result['other'].append(trailing_comments)
 
         return result
 
-    def _organize_ssh_config(self, global_config: str, environments: dict) -> str:
+    def _organize_ssh_config(self, global_config: str, environments: dict,
+                             other_blocks: list = None) -> str:
         """Organize SSH config with proper structure and banners.
 
         Args:
             global_config: Global configuration block
             environments: Dict of environment_name -> {pattern, lines}
+            other_blocks: Blocks not managed by cloudx-proxy, each a list of
+                raw lines, appended verbatim so a rewrite never loses them
 
         Returns:
             str: Organized SSH config content
@@ -951,7 +1073,19 @@ class CloudXSetup:
                 sorted_hosts.sort(key=lambda x: x.split('\n')[0])
 
                 for host in sorted_hosts:
-                    lines.append(host)
+                    lines.append(host.rstrip())
+                    lines.append("")
+
+        # Append everything we don't manage, untouched and in its original
+        # order. These entries are the user's; they are kept last so that our
+        # specific patterns are not shadowed by a catch-all such as 'Host *'.
+        if other_blocks:
+            lines.append("# ==============================================================================")
+            lines.append(f"#  NOT MANAGED BY {self.ssh_host_prefix}-proxy - PRESERVED AS-IS")
+            lines.append("# ==============================================================================")
+            lines.append("")
+            for block_lines in other_blocks:
+                lines.extend(block_lines)
                 lines.append("")
 
         # Join and clean up
@@ -1117,49 +1251,58 @@ class CloudXSetup:
             bool: True if settings were added successfully
         """
         try:
-            host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-            new_host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
-
             # Parse existing config
             parsed = self._parse_ssh_config(current_config)
 
+            # Environments are keyed case-insensitively. Adopt the case already
+            # in the config, otherwise 'Dev' would create a second section next
+            # to an existing 'dev' one, and ssh (whose Host matching IS
+            # case-sensitive) would resolve neither reliably.
+            env_key = cloudx_env.lower()
+            existing_env = parsed['environments'].get(env_key)
+            if existing_env:
+                cloudx_env = existing_env.get('name', cloudx_env)
+
+            host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
+            new_host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
+            host_existed = False
+
             # Ensure environment section exists
-            if cloudx_env not in parsed['environments']:
+            if existing_env is None:
                 # Create new environment
                 env_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-*"
-                parsed['environments'][cloudx_env] = {
+                parsed['environments'][env_key] = {
                     'pattern': env_pattern,
+                    'name': cloudx_env,
                     'lines': [f"Host {env_pattern}"] + self._build_environment_config(cloudx_env).split('\n')[1:]
                 }
                 self.print_status(f"Created new environment section for '{cloudx_env}'", None, 2)
             else:
-                # Check if host entry exists and update if needed
-                env_lines = parsed['environments'][cloudx_env]['lines']
-                host_exists = any(host_pattern in line for line in env_lines if line.startswith('Host '))
-
-                if host_exists:
-                    # Remove old host entry
-                    new_lines = []
-                    skip_until_next_host = False
-                    for line in env_lines:
-                        if line.startswith('Host ') and host_pattern in line:
-                            skip_until_next_host = True
+                # Drop any existing entry for this host; it is re-added below
+                env_lines = existing_env['lines']
+                new_lines = []
+                skipping = False
+                for line in env_lines:
+                    section = self._SECTION_KEYWORD_RE.match(line)
+                    if section:
+                        entry = section.group(2).split('#')[0].strip()
+                        skipping = entry.lower() == host_pattern.lower()
+                        if skipping:
+                            host_existed = True
                             continue
-                        if skip_until_next_host:
-                            if line.startswith('Host '):
-                                skip_until_next_host = False
-                            else:
-                                continue
-                        new_lines.append(line)
-                    parsed['environments'][cloudx_env]['lines'] = new_lines
+                    elif skipping:
+                        continue
+                    new_lines.append(line)
+                existing_env['lines'] = new_lines
 
             # Add new host entry
-            parsed['environments'][cloudx_env]['lines'].extend(new_host_entry.split('\n'))
+            parsed['environments'][env_key]['lines'].extend(new_host_entry.split('\n'))
 
             # Rebuild config with organization
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
-                parsed['environments']
+                parsed['environments'],
+                parsed['other']
             )
 
             # Write organized config
@@ -1170,7 +1313,7 @@ class CloudXSetup:
                 import stat
                 self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
 
-            if self._check_config_exists(host_pattern, organized_config):
+            if host_existed:
                 self.print_status(f"Updated host entry for {host_pattern}", True, 2)
             else:
                 self.print_status(f"Added new host entry for {host_pattern}", True, 2)
@@ -1201,11 +1344,11 @@ class CloudXSetup:
                 return False
 
             # Read current config
-            current_config = self.ssh_config_file.read_text()
+            original_config = self.ssh_config_file.read_text()
 
             # Normalize prefix (cloudX/cloudx) to match the command being used
             # This allows users to convert between naming conventions
-            current_config = self._normalize_prefix(current_config)
+            current_config = self._normalize_prefix(original_config)
 
             # For dry-run, show what would be cleaned up
             if self.dry_run:
@@ -1220,6 +1363,10 @@ class CloudXSetup:
 
                 self.print_status(f"[DRY RUN] Would reorganize {len(parsed['environments'])} environments", None, 2)
                 self.print_status(f"[DRY RUN] Would reorganize {total_hosts} host entries", None, 2)
+                if parsed['other']:
+                    self.print_status(
+                        f"[DRY RUN] Would preserve {len(parsed['other'])} unmanaged entries as-is", None, 2
+                    )
                 return True
 
             # Parse existing config
@@ -1258,8 +1405,16 @@ class CloudXSetup:
             self.print_status("Reorganizing configuration...", None, 2)
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
-                parsed['environments']
+                parsed['environments'],
+                parsed['other']
             )
+
+            # This is a full rewrite, so keep a copy of what was there before
+            backup_file = self.ssh_config_file.with_suffix('.bak')
+            backup_file.write_text(original_config)
+            if platform.system() != 'Windows':
+                backup_file.chmod(0o600)
+            self.print_status(f"Backed up previous config to {format_path(str(backup_file))}", True, 2)
 
             # Write completely rewritten config
             self.ssh_config_file.write_text(organized_config)
@@ -1269,12 +1424,48 @@ class CloudXSetup:
                 import stat
                 self.ssh_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600 permissions
 
+            if parsed['other']:
+                self.print_status(
+                    f"Preserved {len(parsed['other'])} unmanaged entries as-is", True, 2
+                )
             self.print_status(f"Cleanup completed and config reorganized", True, 2)
             return True
 
         except Exception as e:
             self.print_status(f"Error during cleanup: {str(e)}", False, 2)
             return False
+
+    def resolve_environment_name(self, cloudx_env: str) -> str:
+        """Match an environment name against one already in the SSH config.
+
+        Environment names reach us from EC2 tags and from prompts, in whatever
+        case they were written. ssh matches Host patterns case-sensitively, so
+        reusing the case already on disk keeps a single environment section.
+
+        Args:
+            cloudx_env: Environment name as supplied by tag, flag or prompt
+
+        Returns:
+            str: The name to use for this environment
+        """
+        if not cloudx_env or not self.ssh_config_file.exists():
+            return cloudx_env
+
+        try:
+            parsed = self._parse_ssh_config(self.ssh_config_file.read_text())
+        except OSError:
+            return cloudx_env
+
+        existing = parsed['environments'].get(cloudx_env.lower())
+        if not existing:
+            return cloudx_env
+
+        resolved = existing.get('name', cloudx_env)
+        if resolved != cloudx_env:
+            self.print_status(
+                f"Using existing environment '{resolved}' (matched '{cloudx_env}')", True, 2
+            )
+        return resolved
 
     def _check_and_create_generic_config(self, current_config: str) -> Tuple[bool, str]:
         """Check if generic configuration exists and create it if needed.

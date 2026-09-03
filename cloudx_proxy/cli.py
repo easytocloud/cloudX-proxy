@@ -28,6 +28,24 @@ def detect_ssh_defaults() -> tuple:
         return "cloudX", "cloudX", "~/.ssh/cloudX"
 
 
+def short_host_name(host: str, host_prefix: str) -> str:
+    """Strip '<prefix>-<env>-' off a host entry to get its short name.
+
+    The environment name is used rather than a fixed segment count, because
+    environment names may contain hyphens (e.g. 'pre-prod').
+
+    Args:
+        host: Full SSH host name (e.g. 'cloudx-pre-prod-web1')
+        host_prefix: The '<prefix>-<env>-' string to remove
+
+    Returns:
+        str: The short name, or the full host if the prefix doesn't match
+    """
+    if host.lower().startswith(host_prefix.lower()):
+        return host[len(host_prefix):]
+    return host
+
+
 class OptionalValueOption(click.Option):
     """Click option that allows an optional value (e.g., --flag or --flag value)."""
 
@@ -249,6 +267,10 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         env_default = tag_env or getattr(setup, 'default_env', None)
         cloudx_env = setup.prompt("Enter environment", env_default)
 
+        # Reuse the case already in the SSH config so 'Dev' does not create a
+        # second section beside an existing 'dev' one
+        cloudx_env = setup.resolve_environment_name(cloudx_env)
+
         # Use --hostname if provided, otherwise use tag-based default
         if hostname:
             # If hostname is explicitly provided, use it directly
@@ -349,6 +371,8 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             if environment and env_key.lower() != environment.lower():
                 continue
 
+            host_prefix = f"{ssh_host_prefix}-{display_name}-"
+
             # Parse host entries from environment lines
             current_host = None
             current_instance_id = None
@@ -358,9 +382,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 if line.startswith('Host ') and '*' not in line:
                     # Save previous host if exists
                     if current_host:
-                        # Extract short name from hostname (cloudx-env-name -> name)
-                        parts = current_host.split('-')
-                        short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                        short_name = short_host_name(current_host, host_prefix)
                         if display_name not in environments:
                             environments[display_name] = []
                         environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
@@ -380,8 +402,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
 
             # Don't forget the last host
             if current_host:
-                parts = current_host.split('-')
-                short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                short_name = short_host_name(current_host, host_prefix)
                 if display_name not in environments:
                     environments[display_name] = []
                 environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
