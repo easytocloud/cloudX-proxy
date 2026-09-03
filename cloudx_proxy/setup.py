@@ -2,13 +2,21 @@ import os
 import re
 import time
 import shlex
+import shutil
 import subprocess
 import platform
 from pathlib import Path
 from typing import Optional, Tuple
 import boto3
 from botocore.exceptions import ClientError
-from ._1password import check_1password_cli, list_ssh_keys, create_ssh_key, get_vaults, save_public_key
+from ._1password import (
+    OP_TIMEOUT,
+    check_1password_cli,
+    create_ssh_key,
+    get_vaults,
+    list_ssh_keys,
+    save_public_key,
+)
 from .colors import header, warning, info, error as color_error, prompt as color_prompt, status_symbol, format_path, format_command
 
 class CloudXSetup:
@@ -191,11 +199,12 @@ class CloudXSetup:
         self.aws_env = aws_env
         self.ssh_host_prefix = ssh_host_prefix
         
-        # Handle 1Password integration
-        if use_1password is None:
+        # Handle 1Password integration. The flag arrives as None, as a bool, or
+        # as a vault name; note that False must disable it, not enable it.
+        if use_1password is None or use_1password is False:
             self.use_1password = False
             self.op_vault = None
-        elif isinstance(use_1password, bool) or use_1password.lower() == 'true':
+        elif use_1password is True or str(use_1password).lower() == 'true':
             self.use_1password = True
             self.op_vault = "Private"  # Default vault
         else:
@@ -335,6 +344,51 @@ class CloudXSetup:
         except Exception as e:
             self.print_status(f"Error setting permissions: {str(e)}", False, 2)
             return False
+
+    # Tools that must be on PATH for a connection to work, with the page that
+    # explains how to install each one
+    REQUIRED_TOOLS = {
+        'aws': "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+        'session-manager-plugin': "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html",
+    }
+
+    def check_prerequisites(self) -> bool:
+        """Check for the external tools a connection depends on.
+
+        Both are invoked from inside the SSH ProxyCommand, where a 'command not
+        found' is easy to miss - VSCode reports only that it could not connect -
+        so they are reported here, while there is somewhere to show them.
+
+        Returns:
+            bool: True if every required tool was found
+        """
+        self.print_header("Prerequisites")
+
+        if self.dry_run:
+            for tool in self.REQUIRED_TOOLS:
+                self.print_status(f"[DRY RUN] Would check for {tool}", None, 2)
+            return True
+
+        all_found = True
+        for tool, install_url in self.REQUIRED_TOOLS.items():
+            name = f"{tool}.exe" if platform.system() == 'Windows' and tool == 'aws' else tool
+            location = shutil.which(name)
+            if location:
+                self.print_status(f"{name} found at {format_path(location)}", True, 2)
+                continue
+
+            all_found = False
+            self.print_status(f"{name} not found on PATH", False, 2)
+            self.print_status(f"Install it from {install_url}", None, 2)
+
+        if not all_found:
+            self.print_status(
+                warning("Setup will continue, but connections will fail until these are installed"),
+                None,
+                2
+            )
+
+        return all_found
 
     def setup_aws_profile(self) -> bool:
         """Set up AWS profile using aws configure command.
@@ -517,7 +571,8 @@ class CloudXSetup:
                     ['op', 'item', 'get', existing_key['id'], '--fields', 'public key'],
                     capture_output=True,
                     text=True,
-                    check=False
+                    check=False,
+                    timeout=OP_TIMEOUT
                 )
                 
                 if result.returncode == 0:
@@ -1576,6 +1631,37 @@ class CloudXSetup:
         self.print_status(f"Environment config for {pattern} will be added/updated via host entries", None, 2)
         return True, current_config
 
+    @staticmethod
+    def _insert_include_line(content: str, include_line: str) -> str:
+        """Place an Include directive above the first Host/Match block.
+
+        An Include appended to the end of the file would fall inside whatever
+        Host block happens to be last, and would then apply only to that host.
+
+        Args:
+            content: Current content of the system SSH config
+            include_line: The 'Include <path>' directive to add
+
+        Returns:
+            str: Content with the Include in place (unchanged if already there)
+        """
+        if include_line in content:
+            return content
+
+        lines = content.splitlines()
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.lower().startswith(('host ', 'match ')):
+                # Found the first Host or Match block, insert before it
+                lines.insert(index, include_line)
+                lines.insert(index + 1, "")  # Blank line for readability
+                return "\n".join(lines) + "\n"
+
+        # No Host blocks found, append at end with proper spacing
+        if not content.strip():
+            return include_line + "\n"
+        return content.rstrip() + "\n\n" + include_line + "\n"
+
     def _ensure_control_dir(self) -> bool:
         """Create SSH control directory with proper permissions.
         
@@ -1721,28 +1807,9 @@ class CloudXSetup:
                     if include_line in content:
                         self.print_status("System SSH config already includes our config", True, 2)
                     else:
-                        # Find the first Host or Match block
-                        lines = content.splitlines()
-                        insert_position = None
-
-                        for i, line in enumerate(lines):
-                            stripped = line.strip()
-                            if stripped.startswith('Host ') or stripped.startswith('Match '):
-                                # Found first Host or Match block, insert before it
-                                insert_position = i
-                                break
-
-                        if insert_position is not None:
-                            # Insert before the first Host/Match block
-                            lines.insert(insert_position, include_line)
-                            # Add a blank line after for readability
-                            lines.insert(insert_position + 1, "")
-                            new_content = "\n".join(lines)
-                        else:
-                            # No Host blocks found, append at end with proper spacing
-                            new_content = content.rstrip() + "\n\n" + include_line + "\n"
-
-                        system_config_path.write_text(new_content)
+                        system_config_path.write_text(
+                            self._insert_include_line(content, include_line)
+                        )
                         self.print_status("Added include line to system SSH config", True, 2)
 
                     # Set correct permissions on system config file
@@ -1791,14 +1858,24 @@ class CloudXSetup:
         self.print_status(f"Checking SSH connection to {ssh_host}...", None, 4)
         
         try:
-            # Try to connect with a simple command that will exit immediately
+            # Try to connect with a simple command that will exit immediately.
+            # Output is captured, so any prompt would be invisible and would
+            # simply burn the timeout: BatchMode disables password and
+            # passphrase prompts, and accept-new answers the unknown-host-key
+            # question that every first connection would otherwise ask.
             result = subprocess.run(
-                ['ssh', ssh_host, 'exit'],
+                [
+                    'ssh',
+                    '-o', 'BatchMode=yes',
+                    '-o', 'StrictHostKeyChecking=accept-new',
+                    '-o', 'ConnectTimeout=10',
+                    ssh_host, 'exit'
+                ],
                 capture_output=True,
                 text=True,
-                timeout=10  # 10 second timeout
+                timeout=30  # ProxyCommand may need to start the instance first
             )
-            
+
             if result.returncode == 0:
                 self.print_status("SSH connection successful", True, 4)
                 return True
@@ -1973,12 +2050,12 @@ class CloudXSetup:
                         continue
                     new_lines.append(line)
 
-                # Add new include
+                # Add the new include above the first Host block; appending it
+                # would put the Include inside whatever block came last
                 new_include = f"Include {target_dir}/config"
-                if new_include not in content:
-                    new_lines.append(new_include)
-
-                system_config_path.write_text("\n".join(new_lines) + "\n")
+                system_config_path.write_text(
+                    self._insert_include_line("\n".join(new_lines), new_include)
+                )
 
                 if include_removed:
                     self.print_status("Updated ~/.ssh/config: Removed old Include, added new Include", True, 2)

@@ -2,6 +2,11 @@ import os
 import json
 import subprocess
 
+# The 1Password CLI can block on an interactive unlock (biometrics, or a
+# device prompt). Output is captured here, so that prompt would be invisible
+# and the call would hang; fail after a bounded wait instead.
+OP_TIMEOUT = 30
+
 def check_1password_cli() -> tuple:
     """Check if 1Password CLI is installed and authenticated.
     
@@ -14,7 +19,8 @@ def check_1password_cli() -> tuple:
             ['op', '--version'],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if result.returncode != 0:
@@ -27,7 +33,8 @@ def check_1password_cli() -> tuple:
             ['op', 'account', 'list'],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if result.returncode != 0:
@@ -63,7 +70,8 @@ def check_ssh_agent(agent_sock_path: str) -> bool:
             env=env,
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if "Could not open a connection to your authentication agent" in result.stderr:
@@ -86,7 +94,8 @@ def list_ssh_keys() -> list:
             ['op', 'item', 'list', '--categories', 'SSH Key', '--format=json'],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if result.returncode != 0:
@@ -119,7 +128,8 @@ def create_ssh_key(title: str, vault: str) -> tuple:
             ],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if result.returncode != 0:
@@ -166,7 +176,8 @@ def get_vaults() -> list:
             ['op', 'vault', 'list', '--format=json'],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=OP_TIMEOUT
         )
         
         if result.returncode != 0:

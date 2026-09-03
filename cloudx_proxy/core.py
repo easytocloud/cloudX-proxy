@@ -224,25 +224,37 @@ class CloudXProxy:
             logger.debug(f"Running: {' '.join(cmd)}")
 
             # Start AWS CLI process with direct stdin/stdout pass-through
-            process = subprocess.Popen(
-                cmd,
-                env=env,
-                stdin=sys.stdin,
-                stdout=sys.stdout,
-                stderr=subprocess.PIPE,  # Capture stderr for our logging
-                shell=platform.system() == 'Windows'  # shell=True only on Windows
-            )
-            
-            # Monitor stderr for logging while process runs
-            while True:
-                err_line = process.stderr.readline()
-                if not err_line and process.poll() is not None:
-                    break
-                if err_line:
-                    logger.info(err_line.decode().strip())
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    env=env,
+                    stdin=sys.stdin,
+                    stdout=sys.stdout,
+                    stderr=subprocess.PIPE,  # Capture stderr for our logging
+                    shell=platform.system() == 'Windows'  # shell=True only on Windows
+                )
+            except FileNotFoundError:
+                logger.error(
+                    f"'{aws_cmd}' not found. The AWS CLI is required to open an SSM session."
+                )
+                logger.error(
+                    "Install it from "
+                    "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+                )
+                raise
 
-            if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, cmd)
+            # Relay the AWS CLI's stderr to our logging for the life of the
+            # session. Iterating stops at EOF; polling for the exit code inside
+            # the loop would spin at 100% CPU if stderr closed while the process
+            # was still running.
+            for err_line in process.stderr:
+                message = err_line.decode(errors='replace').strip()
+                if message:
+                    logger.info(message)
+
+            returncode = process.wait()
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, cmd)
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error starting session: {e}")

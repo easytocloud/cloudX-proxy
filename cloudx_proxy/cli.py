@@ -226,6 +226,10 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         else:
             print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup ===')}\n")
         
+        # Report missing tooling up front rather than from inside a
+        # ProxyCommand, where the error is easy to miss
+        setup.check_prerequisites()
+
         # Check for migration
         setup.check_and_perform_migration()
         
