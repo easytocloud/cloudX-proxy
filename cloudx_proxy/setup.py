@@ -205,7 +205,11 @@ class CloudXSetup:
             ssh_config: SSH config file path (default: None)
             ssh_dir: Directory for SSH keys and config (default: None)
             aws_env: AWS environment directory (default: None)
-            use_1password: Use 1Password SSH agent for authentication. Can be True/False or a vault name (default: None)
+            use_1password: 1Password vault to use for the SSH key, which also
+                turns the 1Password SSH agent on. None or False disables it,
+                True or "true" selects the default "Private" vault, and any
+                other string names the vault. Holds a vault name, never a
+                credential.
             instance_id: EC2 instance ID to set up connection for (optional)
             ssh_host_prefix: Prefix for SSH hosts (default: "cloudx")
             non_interactive: Non-interactive mode, use defaults for all prompts (default: False)
