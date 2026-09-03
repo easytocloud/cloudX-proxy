@@ -279,7 +279,20 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             # Use hostname from tag, or generate default based on instance ID for non-interactive mode
             hostname_default = tag_hostname or (f"instance-{instance_id[-7:]}" if non_interactive else None)
             hostname = setup.prompt("Enter hostname for the instance", hostname_default)
-        
+
+        # Both are written into a Host line, and the hostname default comes
+        # from an EC2 tag rather than from the user, so validate before use
+        for label, value in (("environment", cloudx_env), ("hostname", hostname)):
+            if not CloudXSetup.validate_ssh_name(value):
+                setup.print_status(f"Invalid {label}: {value!r}", False, 2)
+                setup.print_status(
+                    "Use letters, digits, dots, hyphens and underscores only, "
+                    "starting with a letter or digit",
+                    None,
+                    2
+                )
+                sys.exit(1)
+
         # Set up SSH config
         if not setup.setup_ssh_config(cloudx_env, instance_id, hostname):
             sys.exit(1)

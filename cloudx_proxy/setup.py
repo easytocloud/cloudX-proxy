@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import shlex
 import subprocess
 import platform
 from pathlib import Path
@@ -34,6 +35,70 @@ class CloudXSetup:
         # Match i- followed by exactly 8 or 17 hexadecimal characters
         pattern = r'^i-[0-9a-f]{8}$|^i-[0-9a-f]{17}$'
         return bool(re.match(pattern, instance_id, re.IGNORECASE))
+
+    # Names that end up inside an SSH 'Host' pattern. Whitespace would split
+    # one Host line into several aliases, '#' would start a comment, and the
+    # glob characters would silently widen the pattern.
+    SSH_NAME_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+
+    @classmethod
+    def validate_ssh_name(cls, name: str) -> bool:
+        """Validate a name that is written into the SSH configuration.
+
+        Environment names and hostnames become part of a 'Host' line, and the
+        hostname default is read from an EC2 tag, so it is not necessarily
+        input the user typed. Restrict them to characters that cannot change
+        the meaning of the generated config.
+
+        Args:
+            name: Environment name or hostname to validate
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not name:
+            return False
+
+        return bool(cls.SSH_NAME_PATTERN.match(name))
+
+    @staticmethod
+    def quote_shell_argument(value: str) -> str:
+        """Quote a ProxyCommand argument so a path containing spaces survives.
+
+        ssh hands ProxyCommand to a shell: /bin/sh on Unix, cmd.exe on Windows.
+        Values that need no quoting are returned unchanged, so ordinary configs
+        are unaffected.
+
+        Args:
+            value: The argument to quote
+
+        Returns:
+            str: The argument, quoted if it needs to be
+        """
+        text = str(value)
+
+        if platform.system() == 'Windows':
+            # cmd.exe understands double quotes, not the POSIX single-quote form
+            return f'"{text}"' if (not text or re.search(r'\s', text)) else text
+
+        return shlex.quote(text)
+
+    @staticmethod
+    def quote_config_value(value: str) -> str:
+        """Quote an SSH config directive value that contains whitespace.
+
+        This is ssh_config(5) quoting, not shell quoting: ssh reads double
+        quotes around an argument containing spaces. Values that need no
+        quoting are returned unchanged.
+
+        Args:
+            value: The directive value to quote
+
+        Returns:
+            str: The value, quoted if it needs to be
+        """
+        text = str(value)
+        return f'"{text}"' if re.search(r'\s', text) else text
 
     def get_instance_tags(self, instance_id: str) -> Tuple[Optional[str], Optional[str]]:
         """Fetch instance tags and extract environment and hostname.
@@ -670,7 +735,7 @@ class CloudXSetup:
 
         # Always include aws-env if specified (environment-specific, cannot be auto-detected)
         if self.aws_env:
-            proxy_command += f" --aws-env {self.aws_env}"
+            proxy_command += f" --aws-env {self.quote_shell_argument(self.aws_env)}"
 
         # Determine what the auto-detected defaults would be for this environment
         # Default profile and ssh-key based on directory: cloudX > vscode > cloudX
@@ -686,11 +751,11 @@ class CloudXSetup:
 
         # Only include profile if it differs from the auto-detected default
         if self.profile != default_profile:
-            proxy_command += f" --profile {self.profile}"
+            proxy_command += f" --profile {self.quote_shell_argument(self.profile)}"
 
         # Only include ssh-key if it differs from the auto-detected default
         if self.ssh_key != default_ssh_key:
-            proxy_command += f" --ssh-key {self.ssh_key}"
+            proxy_command += f" --ssh-key {self.quote_shell_argument(self.ssh_key)}"
 
         # Only include ssh-dir if it's non-standard (not ~/.ssh/cloudX or ~/.ssh/vscode)
         standard_cloudx = cloudx_dir / "config"
@@ -698,7 +763,7 @@ class CloudXSetup:
 
         if self.ssh_config_file not in (standard_cloudx, standard_vscode):
             # Non-standard config file location, include ssh-config
-            proxy_command += f" --ssh-config {self.ssh_config_file}"
+            proxy_command += f" --ssh-config {self.quote_shell_argument(self.ssh_config_file)}"
 
         return proxy_command
         
@@ -714,12 +779,12 @@ class CloudXSetup:
             # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search
             # (IdentitiesOnly is now set globally for all cloudX hosts)
             return """    IdentityAgent ~/.1password/agent.sock
-    IdentityFile {}.pub
-""".format(self.ssh_key_file)
+    IdentityFile {}
+""".format(self.quote_config_value(f"{self.ssh_key_file}.pub"))
         else:
             # Standard SSH key configuration
             # (IdentitiesOnly is now set globally for all cloudX hosts)
-            return f"""    IdentityFile {self.ssh_key_file}
+            return f"""    IdentityFile {self.quote_config_value(self.ssh_key_file)}
 """
 
     def _get_timestamp(self) -> str:
@@ -1382,12 +1447,15 @@ class CloudXSetup:
                 new_lines = []
                 for line in env_lines:
                     if line.strip().startswith('ProxyCommand'):
-                        # Extract aws-env from the existing ProxyCommand if present
+                        # Extract aws-env from the existing ProxyCommand if
+                        # present, quoted or not
                         aws_env = None
                         if '--aws-env' in line:
-                            match = re.search(r'--aws-env\s+(\S+)', line)
+                            match = re.search(
+                                r'''--aws-env\s+("[^"]*"|'[^']*'|\S+)''', line
+                            )
                             if match:
-                                aws_env = match.group(1)
+                                aws_env = match.group(1).strip('"\'')
 
                         # Temporarily set aws_env for ProxyCommand building
                         original_aws_env = self.aws_env
@@ -1559,7 +1627,18 @@ class CloudXSetup:
             bool: True if config was set up successfully
         """
         self.print_header("SSH Configuration")
-        
+
+        # Both end up in a Host line; reject anything that could change the
+        # structure of the generated config
+        for label, value in (("environment", cloudx_env), ("hostname", hostname)):
+            if not self.validate_ssh_name(value):
+                self.print_status(f"Invalid {label}: {value!r}", False, 2)
+                self.print_status(
+                    "Use letters, digits, dots, hyphens and underscores only, "
+                    "starting with a letter or digit", None, 2
+                )
+                return False
+
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would set up SSH configuration with three-tier approach")
             self.print_status(f"[DRY RUN] Would create generic pattern: {self.ssh_host_prefix}-*", None, 2)
