@@ -468,3 +468,126 @@ class TestStripGeneratedBanners:
         lines = ["# one", "# two", "# three"]
 
         assert setup._strip_generated_banners(lines) == lines
+
+
+class TestManagedHostLinesShareOnePrefixCase:
+    """ssh matches Host patterns case-sensitively.
+
+    Blocks are recognised as ours case-insensitively, so a config carrying a
+    stale `Host cloudx-*` from an older release was written back unchanged and
+    then never matched `cloudX-dev-web1`. The generic block's `IdentitiesOnly
+    yes` and `User ec2-user` silently stopped applying, so ssh offered every
+    key in the agent and hit the server's MaxAuthTries before reaching the one
+    just pushed - surfacing as "Too many authentication failures" on a
+    connection that was otherwise healthy.
+    """
+
+    MIXED_CASE = """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudx-*
+    User ec2-user
+    TCPKeepAlive yes
+    IdentitiesOnly yes
+
+Host cloudX-DTA-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile cloudx
+
+Host cloudX-DTA-unified
+    HostName i-095f07267c26a685c
+"""
+
+    def uppercase_setup(self, tmp_path):
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True, exist_ok=True)
+        (ssh_dir / "config").write_text(self.MIXED_CASE)
+        return CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudX", non_interactive=True
+        )
+
+    def managed_host_lines(self, setup):
+        return [
+            line for line in setup.ssh_config_file.read_text().splitlines()
+            if line.startswith("Host ")
+        ]
+
+    def test_adding_a_host_normalises_the_stale_generic_block(self, tmp_path):
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        lines = self.managed_host_lines(setup)
+        assert "Host cloudX-*" in lines
+        assert "Host cloudx-*" not in lines
+
+    def test_cleanup_normalises_it_too(self, tmp_path):
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.cleanup_config()
+
+        lines = self.managed_host_lines(setup)
+        assert "Host cloudX-*" in lines
+        assert "Host cloudx-*" not in lines
+
+    def test_every_managed_host_line_uses_one_case(self, tmp_path):
+        """The invariant: a written file never disagrees with itself."""
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        for line in self.managed_host_lines(setup):
+            assert line.startswith("Host cloudX-"), f"inconsistent prefix case: {line!r}"
+
+    def test_the_generic_block_keeps_its_directives(self, tmp_path):
+        """Normalising the header must not disturb what the block contains."""
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        result = setup.ssh_config_file.read_text()
+        for directive in ("User ec2-user", "TCPKeepAlive yes", "IdentitiesOnly yes"):
+            assert directive in result
+
+    def test_lowercase_invocation_normalises_the_other_way(self, tmp_path):
+        ssh_dir = tmp_path / "cloudx"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text("""Host cloudX-*
+    User ec2-user
+    IdentitiesOnly yes
+
+Host cloudx-dev-*
+    ProxyCommand uvx cloudx-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", non_interactive=True
+        )
+
+        setup.cleanup_config()
+
+        for line in self.managed_host_lines(setup):
+            assert line.startswith("Host cloudx-"), f"inconsistent prefix case: {line!r}"
+
+
+class TestNormalizeManagedHostLine:
+    def test_wrong_case_prefix_is_corrected(self, setup):
+        assert setup._normalize_managed_host_line("Host cloudX-dev-web1") == "Host cloudx-dev-web1"
+
+    def test_correct_case_is_untouched(self, setup):
+        assert setup._normalize_managed_host_line("Host cloudx-dev-web1") == "Host cloudx-dev-web1"
+
+    def test_inline_comment_survives(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-web1 # erik's box"
+        ) == "Host cloudx-dev-web1 # erik's box"
+
+    def test_only_the_prefix_is_touched(self, setup):
+        """A host whose own name contains the prefix spelling is not rewritten."""
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-cloudX-thing"
+        ) == "Host cloudx-dev-cloudX-thing"
+
+    def test_a_non_host_line_is_untouched(self, setup):
+        assert setup._normalize_managed_host_line("    User ec2-user") == "    User ec2-user"

@@ -1000,13 +1000,43 @@ class CloudXSetup:
 
         return f'{indent}{keyword}{gap}"{value}"'
 
-    @classmethod
-    def _clean_managed_lines(cls, lines: list) -> list:
+    def _normalize_managed_host_line(self, line: str) -> str:
+        """Write a managed Host line with the prefix case currently in use.
+
+        Blocks are recognised as ours case-insensitively, but ssh matches Host
+        patterns case-SENSITIVELY. Writing a block back in the case it happened
+        to have therefore produces a file whose parts disagree: a stale
+        `Host cloudx-*` sitting above `Host cloudX-dev-web1` never matches it,
+        so `IdentitiesOnly yes` and `User ec2-user` silently stop applying -
+        which lets ssh offer every agent key and hit the server's MaxAuthTries
+        before reaching the one that was just pushed.
+
+        Args:
+            line: A managed block's Host line
+
+        Returns:
+            str: The line with its prefix in the canonical case
+        """
+        match = re.match(r'^(\s*)(host)(\s+)(.*)$', line, re.IGNORECASE)
+        if not match:
+            return line
+
+        indent, keyword, gap, value = match.groups()
+        normalized = re.sub(
+            rf'^{re.escape(self.ssh_host_prefix)}-',
+            f'{self.ssh_host_prefix}-',
+            value,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        return f'{indent}{keyword}{gap}{normalized}'
+
+    def _clean_managed_lines(self, lines: list) -> list:
         """Strip comments and blank lines from a block cloudx-proxy manages.
 
-        The header line is kept verbatim so inline comments on Host entries
-        survive; everything below it is normalised, since those sections are
-        regenerated from scratch on every write.
+        The header line keeps its inline comment, but has its prefix put into
+        the case in use; everything below it is normalised, since those
+        sections are regenerated from scratch on every write.
 
         Args:
             lines: Raw lines of the block, header first
@@ -1017,14 +1047,14 @@ class CloudXSetup:
         cleaned = []
         for index, line in enumerate(lines):
             if index == 0:
-                cleaned.append(line.rstrip())
+                cleaned.append(self._normalize_managed_host_line(line.rstrip()))
                 continue
             stripped = line.strip()
             if not stripped or stripped.startswith('#'):
                 continue
             if '#' in line:
                 line = line.split('#')[0].rstrip()
-            line = cls._requote_path_directive(line)
+            line = self._requote_path_directive(line)
             cleaned.append(line.rstrip())
         return cleaned
 
