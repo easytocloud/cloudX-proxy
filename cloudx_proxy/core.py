@@ -1,7 +1,11 @@
 import logging
 import os
+import platform
+import shutil
+import subprocess
 import sys
 import time
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -27,8 +31,8 @@ def configure_logging(verbose: bool = False) -> None:
 
 class CloudXProxy:
     def __init__(self, instance_id: str, port: int = 22, profile: str = "vscode",
-                 region: str = None, ssh_key: str = "vscode", ssh_config: str = None,
-                 ssh_dir: str = None, aws_env: str = None, dry_run: bool = False):
+                 region: str | None = None, ssh_key: str = "vscode", ssh_config: str | None = None,
+                 ssh_dir: str | None = None, aws_env: str | None = None, dry_run: bool = False):
         """Initialize CloudX client for SSH tunneling via AWS SSM.
         
         Args:
@@ -193,13 +197,10 @@ class CloudXProxy:
         """
         if self.dry_run:
             region = self.region or 'eu-west-1'  # Use initialized region or default
-            logger.info(f"[DRY RUN] Would start SSM session with SSH port forwarding")
+            logger.info("[DRY RUN] Would start SSM session with SSH port forwarding")
             logger.info(f"[DRY RUN] Would run: aws ssm start-session --target {self.instance_id} --document-name AWS-StartSSHSession --parameters portNumber={self.port} --profile {self.profile} --region {region}")
             return
             
-        import subprocess
-        import platform
-        
         try:
             # Build environment with AWS credentials configuration
             env = os.environ.copy()
@@ -207,13 +208,27 @@ class CloudXProxy:
                 env['AWS_CONFIG_FILE'] = os.environ['AWS_CONFIG_FILE']
             if 'AWS_SHARED_CREDENTIALS_FILE' in os.environ:
                 env['AWS_SHARED_CREDENTIALS_FILE'] = os.environ['AWS_SHARED_CREDENTIALS_FILE']
-            
-            # Determine AWS CLI command based on platform
+
+            # Resolve the AWS CLI to a concrete path and run it directly. This
+            # used to pass shell=True on Windows, which hands the whole command
+            # line to cmd.exe: --profile and --region arrive from the SSH
+            # config's ProxyCommand and are not validated, so a shell
+            # metacharacter in either would have been interpreted there.
             aws_cmd = 'aws.exe' if platform.system() == 'Windows' else 'aws'
-            
+            aws_path = shutil.which(aws_cmd) or shutil.which('aws')
+            if aws_path is None:
+                logger.error(
+                    f"'{aws_cmd}' not found on PATH. The AWS CLI is required to open an SSM session."
+                )
+                logger.error(
+                    "Install it from "
+                    "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+                )
+                raise FileNotFoundError(aws_cmd)
+
             # Build command as list (works for both Windows and Unix)
             cmd = [
-                aws_cmd, 'ssm', 'start-session',
+                aws_path, 'ssm', 'start-session',
                 '--target', self.instance_id,
                 '--document-name', 'AWS-StartSSHSession',
                 '--parameters', f'portNumber={self.port}',
@@ -230,19 +245,20 @@ class CloudXProxy:
                 stdin=sys.stdin,
                 stdout=sys.stdout,
                 stderr=subprocess.PIPE,  # Capture stderr for our logging
-                shell=platform.system() == 'Windows'  # shell=True only on Windows
             )
-            
-            # Monitor stderr for logging while process runs
-            while True:
-                err_line = process.stderr.readline()
-                if not err_line and process.poll() is not None:
-                    break
-                if err_line:
-                    logger.info(err_line.decode().strip())
 
-            if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, cmd)
+            # Relay the AWS CLI's stderr to our logging for the life of the
+            # session. Iterating stops at EOF; polling for the exit code inside
+            # the loop would spin at 100% CPU if stderr closed while the process
+            # was still running.
+            for err_line in process.stderr:
+                message = err_line.decode(errors='replace').strip()
+                if message:
+                    logger.info(message)
+
+            returncode = process.wait()
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, cmd)
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error starting session: {e}")
@@ -256,12 +272,12 @@ class CloudXProxy:
         4. Start SSM session
         """
         if self.dry_run:
-            logger.info(f"[DRY RUN] Connection workflow preview:")
+            logger.info("[DRY RUN] Connection workflow preview:")
             logger.info(f"[DRY RUN] Would check instance status: {self.instance_id}")
-            logger.info(f"[DRY RUN] Would start instance if stopped")
-            logger.info(f"[DRY RUN] Would wait for instance to come online")
-            logger.info(f"[DRY RUN] Would push SSH key to instance")
-            logger.info(f"[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
+            logger.info("[DRY RUN] Would start instance if stopped")
+            logger.info("[DRY RUN] Would wait for instance to come online")
+            logger.info("[DRY RUN] Would push SSH key to instance")
+            logger.info("[DRY RUN] Would start SSM session with port forwarding 22 -> localhost:22")
             return True
 
         status = self.get_instance_status()

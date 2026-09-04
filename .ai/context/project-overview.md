@@ -38,8 +38,9 @@ uvx cloudX-proxy setup [OPTIONS]
 - `--aws-env`: AWS environment directory.
 - `--instance`: EC2 instance ID (skips prompt).
 - `--hostname`: Hostname for SSH config.
-- `--yes`: Non-interactive mode.
-- `--dry-run`: Preview changes.
+- `--environment`: cloudX environment (default: from the instance `Name` tag).
+- `--yes`: Non-interactive mode; failures exit non-zero instead of being continued past.
+- `--dry-run`: Preview changes; makes no AWS calls and writes no files.
 
 **What Setup Does:**
 1. **Configures AWS Profile**: Creates/validates profile for IAM user.

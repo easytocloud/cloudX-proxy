@@ -1,11 +1,14 @@
 import os
 import sys
 from pathlib import Path
+
 import click
+
 from . import __version__
+from .colors import error as color_error
+from .colors import format_command, format_hostname, header, info, secondary, success
 from .core import CloudXProxy, configure_logging, logger
 from .setup import CloudXSetup
-from .colors import header, error as color_error, success, info, format_hostname, format_command, secondary
 
 
 def detect_ssh_defaults() -> tuple:
@@ -28,28 +31,22 @@ def detect_ssh_defaults() -> tuple:
         return "cloudX", "cloudX", "~/.ssh/cloudX"
 
 
-class OptionalValueOption(click.Option):
-    """Click option that allows an optional value (e.g., --flag or --flag value)."""
+def short_host_name(host: str, host_prefix: str) -> str:
+    """Strip '<prefix>-<env>-' off a host entry to get its short name.
 
-    def __init__(self, *args, **kwargs):
-        _flag_value = kwargs.pop("flag_value", None)
-        if _flag_value is None:
-            raise ValueError("flag_value is required for OptionalValueOption")
-        if kwargs.get('nargs', 1) != 1:
-            raise ValueError("OptionalValueOption only supports nargs=1")
+    The environment name is used rather than a fixed segment count, because
+    environment names may contain hyphens (e.g. 'pre-prod').
 
-        # Force Click to treat this as a regular option (so it can take a value)
-        kwargs.setdefault('is_flag', False)
-        kwargs['flag_value'] = _flag_value
+    Args:
+        host: Full SSH host name (e.g. 'cloudx-pre-prod-web1')
+        host_prefix: The '<prefix>-<env>-' string to remove
 
-        super().__init__(*args, **kwargs)
-
-        # Ensure Click knows this flag may omit its value and fall back to flag_value
-        self._flag_needs_value = True
-        self.flag_value = _flag_value
-        self._flag_default = _flag_value
-
-
+    Returns:
+        str: The short name, or the full host if the prefix doesn't match
+    """
+    if host.lower().startswith(host_prefix.lower()):
+        return host[len(host_prefix):]
+    return host
 
 
 @click.group()
@@ -103,7 +100,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 
     try:
         # Auto-detect defaults from config directory
-        default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+        default_profile, default_ssh_key, _detected_dir = detect_ssh_defaults()
 
         # Use detected defaults if options not provided
         if not profile:
@@ -136,7 +133,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -147,8 +144,12 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option(
     '--1password',
-    'use_1password',
-    cls=OptionalValueOption,
+    # The flag keeps the product's name; the variable behind it is op_* like
+    # every other 1Password identifier - see the naming rule in _op.py
+    'op_vault',
+    # Click's optional-value form: absent -> None, bare -> flag_value,
+    # given a value -> that value
+    is_flag=False,
     flag_value='Private',
     default=None,
     metavar='[VAULT]',
@@ -156,11 +157,13 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 )
 @click.option('--instance', help='EC2 instance ID to set up connection for')
 @click.option('--hostname', help='Hostname to use for SSH configuration')
+@click.option('--environment', help='cloudX environment (default: from the instance Name tag)')
 @click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
-def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, use_1password: str,
-          instance: str, hostname: str, ssh_host_prefix: str, non_interactive: bool, dry_run: bool):
+def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, op_vault: str,
+          instance: str, hostname: str, environment: str, ssh_host_prefix: str,
+          non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
     
     \b
@@ -180,15 +183,13 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
     cloudx-proxy setup --1password
     cloudx-proxy setup --1password Work
     cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --yes
+    cloudx-proxy setup --instance i-0123456789abcdef0 --hostname myserver --environment dev --yes --dry-run
     """
     try:
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
             cmd_name = os.path.basename(sys.argv[0])
-            if cmd_name == 'cloudX-proxy':
-                ssh_host_prefix = 'cloudX'
-            else:
-                ssh_host_prefix = 'cloudx'
+            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
 
         setup = CloudXSetup(
             profile=profile,
@@ -196,7 +197,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             ssh_config=ssh_config,
             ssh_dir=ssh_dir,
             aws_env=aws_env,
-            use_1password=use_1password,
+            op_vault=op_vault,
             instance_id=instance,
             ssh_host_prefix=ssh_host_prefix,
             non_interactive=non_interactive,
@@ -208,6 +209,10 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         else:
             print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup ===')}\n")
         
+        # Report missing tooling up front rather than from inside a
+        # ProxyCommand, where the error is easy to miss
+        setup.check_prerequisites()
+
         # Check for migration
         setup.check_and_perform_migration()
         
@@ -242,12 +247,28 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             sys.exit(1)
 
         # Fetch instance tags to get environment and hostname defaults
-        setup.print_status("Fetching instance tags...", None, 2)
+        # (skipped under --dry-run, which must not call AWS)
         tag_env, tag_hostname = setup.get_instance_tags(instance_id)
 
-        # Use environment from tag, fall back to AWS user default, or prompt
-        env_default = tag_env or getattr(setup, 'default_env', None)
-        cloudx_env = setup.prompt("Enter environment", env_default)
+        # Environment: --environment wins, then the Name tag, then the AWS user
+        if environment:
+            setup.print_status(f"Using provided environment: {environment}", True, 2)
+            cloudx_env = environment
+        else:
+            env_default = tag_env or getattr(setup, 'default_env', None)
+            if non_interactive and not env_default:
+                setup.print_status("Could not determine the environment", False, 2)
+                setup.print_status(
+                    "Pass --environment, or tag the instance 'cloudX-{env}-{hostname}'",
+                    None,
+                    2
+                )
+                sys.exit(1)
+            cloudx_env = setup.prompt("Enter environment", env_default)
+
+        # Reuse the case already in the SSH config so 'Dev' does not create a
+        # second section beside an existing 'dev' one
+        cloudx_env = setup.resolve_environment_name(cloudx_env)
 
         # Use --hostname if provided, otherwise use tag-based default
         if hostname:
@@ -257,7 +278,20 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             # Use hostname from tag, or generate default based on instance ID for non-interactive mode
             hostname_default = tag_hostname or (f"instance-{instance_id[-7:]}" if non_interactive else None)
             hostname = setup.prompt("Enter hostname for the instance", hostname_default)
-        
+
+        # Both are written into a Host line, and the hostname default comes
+        # from an EC2 tag rather than from the user, so validate before use
+        for label, value in (("environment", cloudx_env), ("hostname", hostname)):
+            if not CloudXSetup.validate_ssh_name(value):
+                setup.print_status(f"Invalid {label}: {value!r}", False, 2)
+                setup.print_status(
+                    "Use letters, digits, dots, hyphens and underscores only, "
+                    "starting with a letter or digit",
+                    None,
+                    2
+                )
+                sys.exit(1)
+
         # Set up SSH config
         if not setup.setup_ssh_config(cloudx_env, instance_id, hostname):
             sys.exit(1)
@@ -267,7 +301,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             sys.exit(1)
         
     except Exception as e:
-        print(f"\n{color_error(f'Error: {str(e)}')}", file=sys.stderr)
+        print(f"\n{color_error(f'Error: {e!s}')}", file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -311,8 +345,8 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             if environment:
                 print(f"[DRY RUN] Would filter hosts by environment: {environment}")
             if detailed:
-                print(f"[DRY RUN] Would show detailed information including instance IDs")
-            print(f"[DRY RUN] Would parse SSH configuration and display grouped hosts")
+                print("[DRY RUN] Would show detailed information including instance IDs")
+            print("[DRY RUN] Would parse SSH configuration and display grouped hosts")
             return
         
         if not config_file.exists():
@@ -349,6 +383,8 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             if environment and env_key.lower() != environment.lower():
                 continue
 
+            host_prefix = f"{ssh_host_prefix}-{display_name}-"
+
             # Parse host entries from environment lines
             current_host = None
             current_instance_id = None
@@ -358,9 +394,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 if line.startswith('Host ') and '*' not in line:
                     # Save previous host if exists
                     if current_host:
-                        # Extract short name from hostname (cloudx-env-name -> name)
-                        parts = current_host.split('-')
-                        short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                        short_name = short_host_name(current_host, host_prefix)
                         if display_name not in environments:
                             environments[display_name] = []
                         environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
@@ -380,8 +414,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
 
             # Don't forget the last host
             if current_host:
-                parts = current_host.split('-')
-                short_name = '-'.join(parts[2:]) if len(parts) >= 3 else current_host
+                short_name = short_host_name(current_host, host_prefix)
                 if display_name not in environments:
                     environments[display_name] = []
                 environments[display_name].append((current_host, short_name, current_instance_id or "N/A", current_comment))
@@ -398,7 +431,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         # Print generic patterns if any and detailed mode
         if generic_hosts and detailed:
             print(info("Generic Patterns:"))
-            for hostname, instance_id in generic_hosts:
+            for hostname, _instance_id in generic_hosts:
                 print(f"  {format_hostname(hostname)}")
             print()
 
@@ -407,10 +440,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             print(info(f"Environment: {env}"))
             for hostname, name, instance_id, comment in sorted(hosts, key=lambda x: x[1]):
                 # Build the output line with instance ID and optional comment in brackets
-                if comment:
-                    bracket_content = f"{hostname}, {instance_id}, {comment}"
-                else:
-                    bracket_content = f"{hostname}, {instance_id}"
+                bracket_content = f"{hostname}, {instance_id}, {comment}" if comment else f"{hostname}, {instance_id}"
                 print(f"  {name} {secondary(f'({bracket_content})')}")
             print()
 
@@ -420,7 +450,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         print("  Connect with VSCode: Use Remote Explorer in VSCode")
         
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -443,7 +473,7 @@ def migrate(target_dir: str, dry_run: bool):
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -479,16 +509,13 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
     try:
         # Auto-detect SSH config location if not provided
         if not ssh_config:
-            default_profile, default_ssh_key, detected_dir = detect_ssh_defaults()
+            _default_profile, _default_ssh_key, detected_dir = detect_ssh_defaults()
             ssh_config = f"{detected_dir}/config"
 
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
             cmd_name = os.path.basename(sys.argv[0])
-            if cmd_name == 'cloudX-proxy':
-                ssh_host_prefix = 'cloudX'
-            else:
-                ssh_host_prefix = 'cloudx'
+            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
 
         setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
@@ -498,7 +525,7 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
             sys.exit(1)
 
     except Exception as e:
-        print(color_error(f"Error: {str(e)}"), file=sys.stderr)
+        print(color_error(f"Error: {e!s}"), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':

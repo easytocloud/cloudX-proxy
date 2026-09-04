@@ -5,7 +5,6 @@ no-color support for non-TTY environments.
 """
 
 import sys
-from typing import Optional
 
 
 class Colors:
@@ -104,14 +103,7 @@ def secondary(text: str) -> str:
     return colorize(text, Colors.SECONDARY, bold=False)
 
 
-def bold(text: str) -> str:
-    """Make text bold."""
-    if not Colors.should_color():
-        return text
-    return f"{Colors.BOLD}{text}{Colors.RESET}"
-
-
-def status_symbol(status: Optional[bool]) -> str:
+def status_symbol(status: bool | None) -> str:
     """Get status symbol with color.
 
     Args:
@@ -126,11 +118,6 @@ def status_symbol(status: Optional[bool]) -> str:
         return error("✗")
     else:
         return "○"
-
-
-def format_instance_id(instance_id: str) -> str:
-    """Format instance ID with color."""
-    return colorize(instance_id, Colors.YELLOW, bold=False)
 
 
 def format_hostname(hostname: str) -> str:

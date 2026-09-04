@@ -89,7 +89,7 @@ When working on this codebase, prioritize:
 1. **Type safety**: Add complete type hints to new code.
 2. **Single responsibility**: Keep classes and methods focused.
 3. **Error handling**: Use specific exceptions with context.
-4. **Testing**: Write tests for new functionality (when framework exists).
+4. **Testing**: Write tests for new functionality. Run `uv run pytest` and `uv run ruff check cloudx_proxy tests`; both gate CI. `tests/test_backward_compat.py` holds SSH configs as earlier releases wrote them and must keep passing unchanged - a failure there means existing users would have to edit a file or re-run setup.
 5. **Security**: Validate all inputs and sanitize subprocess calls.
 
 ## Release Process

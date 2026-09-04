@@ -230,6 +230,14 @@ The setup command will:
    - Offers to wait for setup completion
    - Monitors setup progress
 
+### Prerequisites Check
+
+`setup` first checks that the AWS CLI and the Session Manager plugin are on your
+PATH. Both are invoked from inside the SSH ProxyCommand, where a missing binary
+surfaces only as "Could not establish connection" in VSCode, so setup reports it
+up front. Setup continues either way - writing the configuration is still useful -
+but connections will fail until they are installed.
+
 ### SSH Configuration
 
 The setup command configures SSH to use cloudX-proxy as a ProxyCommand, enabling seamless connections through AWS Systems Manager. For example, running:
@@ -440,8 +448,9 @@ Options:
 - `--aws-env` (optional): AWS environment directory to use. If specified, AWS configuration and credentials will be read from ~/.aws/aws-envs/{env}/.
 - `--instance` (optional): EC2 instance ID to set up connection for. If provided, skips the instance ID prompt.
 - `--hostname` (optional): Hostname to use for SSH configuration. If not provided, a hostname will be generated from the instance ID in non-interactive mode or prompted for in interactive mode.
-- `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values.
-- `--dry-run` (flag): Preview setup changes without actually executing them. Useful for testing configurations before applying them.
+- `--environment` (optional): cloudX environment (e.g. `dev`, `pre-prod`). If not provided, it is taken from the instance's `Name` tag (`cloudX-{env}-{hostname}`), then from the AWS user name. Required with `--yes` when neither is available.
+- `--yes` (flag): Non-interactive mode, use default values for all prompts. Requires sufficient defaults or explicit parameters for all required values. Unlike interactive mode, a failure is never continued past: setup reports the error and exits non-zero rather than carrying on.
+- `--dry-run` (flag): Preview setup changes without actually executing them. Makes no AWS calls and writes no files, so it works without credentials.
 
 Example usage:
 ```bash
@@ -533,6 +542,11 @@ The cleanup command reorganizes and normalizes your SSH configuration file. It:
 - Reorganizes the config with proper structure and banners
 - Normalizes all `cloudX`/`cloudx` prefixes to match the command used
 - Rebuilds ProxyCommand entries to remove redundant flags
+- Preserves entries it does not manage (your own `Host` and `Match` blocks,
+  with the comments above them) in a clearly marked section at the end
+- Writes the previous contents to `<config>.bak` before rewriting
+
+`cleanup` performs a full rewrite of the file, so the backup is your undo.
 
 Options:
 - `--ssh-config` (optional): Path to the SSH config file to use. If not specified, uses ~/.ssh/cloudX/config.
