@@ -1,3 +1,17 @@
+## [0.17.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.1...v0.17.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* do not delete a live 1Password agent socket without asking ([5cd724c](https://github.com/easytocloud/cloudX-proxy/commit/5cd724c0cb25f02d440ecf792f54bc1efde557fd))
+* harden the runtime paths around subprocesses ([5f69662](https://github.com/easytocloud/cloudX-proxy/commit/5f69662d6a7da586abc7ec7041c5660a80280297))
+* make --yes and --dry-run report what actually happened ([9a6dcc2](https://github.com/easytocloud/cloudX-proxy/commit/9a6dcc28ecc4f2295aa41f3fedbe396399d52fc2))
+* preserve top-level directives and stop banners accumulating ([ea89703](https://github.com/easytocloud/cloudX-proxy/commit/ea897034fd860a41c1dcf4340d5903244a29e320))
+* repair unquoted IdentityFile paths in existing configs ([e2dc815](https://github.com/easytocloud/cloudX-proxy/commit/e2dc8151d1897236553e5b67ff08d3edf094a1d2))
+* run the AWS CLI without a shell, and resolve CodeQL's import notes ([4962c2c](https://github.com/easytocloud/cloudX-proxy/commit/4962c2c20e5d2c98d13469d09a56430836de268d))
+* stop SSH config rewrites from discarding configuration ([40b1d0f](https://github.com/easytocloud/cloudX-proxy/commit/40b1d0ff9b4c503df6d142b9d2baef6f34579011))
+* validate and quote values written into the SSH config ([bf55191](https://github.com/easytocloud/cloudX-proxy/commit/bf551913be8057f3e1e58599a46b14b6f2d7422b))
+
 ## [0.17.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.0...v0.17.1) (2026-09-02)
 
 # [0.17.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.16.15...v0.17.0) (2026-09-02)
