@@ -155,10 +155,10 @@ class TestIdentityFileQuoting:
 
         assert f'IdentityFile "{ssh_dir / "cloudX"}"' in auth
 
-    def test_1password_key_path_with_spaces_is_quoted(self, tmp_path):
+    def test_op_key_path_with_spaces_is_quoted(self, tmp_path):
         ssh_dir = tmp_path / "My SSH Dir"
         setup = CloudXSetup(
-            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", use_1password="Private"
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", op_vault="Private"
         )
 
         auth = setup._build_auth_config()

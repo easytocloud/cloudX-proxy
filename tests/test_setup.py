@@ -2,7 +2,7 @@
 
 These focus on the behaviour touched by the CodeQL quality cleanup:
 
-- ``_create_1password_key`` was restructured to remove an unreachable
+- ``_create_op_key`` was restructured to remove an unreachable
   statement; the "key created" path must still save the public key AND
   surface the SSH-agent reminder before returning ``True``.
 - ``setup_aws_profile`` narrowed a bare ``except:`` to ``except Exception:``;
@@ -50,7 +50,7 @@ class TestValidateInstanceId:
         assert CloudXSetup.validate_instance_id(instance_id) is False
 
 
-class TestCreate1PasswordKey:
+class TestCreateOpKey:
     """Covers the restructured (previously unreachable) success path."""
 
     def _install_stubs(self, monkeypatch, setup, *, create_success=True,
@@ -91,7 +91,7 @@ class TestCreate1PasswordKey:
     def test_success_saves_key_and_shows_reminder(self, monkeypatch, setup):
         calls = self._install_stubs(monkeypatch, setup)
 
-        result = setup._create_1password_key()
+        result = setup._create_op_key()
 
         assert result is True
         assert len(calls["saved"]) == 1, "public key should be saved exactly once"
@@ -101,7 +101,7 @@ class TestCreate1PasswordKey:
     def test_save_failure_returns_false_without_reminder(self, monkeypatch, setup):
         calls = self._install_stubs(monkeypatch, setup, save_success=False)
 
-        result = setup._create_1password_key()
+        result = setup._create_op_key()
 
         assert result is False
         assert calls["reminded"] is False
@@ -109,7 +109,7 @@ class TestCreate1PasswordKey:
     def test_create_failure_returns_false(self, monkeypatch, setup):
         calls = self._install_stubs(monkeypatch, setup, create_success=False)
 
-        result = setup._create_1password_key()
+        result = setup._create_op_key()
 
         assert result is False
         assert calls["saved"] == [], "should not attempt to save when creation failed"

@@ -1,3 +1,19 @@
+"""1Password integration, via 1Password's own CLI (`op`).
+
+Naming rule: every identifier for this integration is `op_*`, after the `op`
+CLI - never `use_1password`, `onepassword_agent_sock` or similar. User-facing
+text still says "1Password"; only identifiers avoid the word.
+
+That is not only style. CodeQL's py/clear-text-logging-sensitive-data query
+decides whether a value is a credential from the name of the identifier that
+produced it, and it matches "password" as a substring - which both "1password"
+and "onepassword" contain. Naming things after the product therefore marked
+vault names, the agent socket path and the `op --version` string as secrets,
+and every status message printing one was reported as clear-text logging of a
+password: high severity, and wrong every time. Renaming to `op_*` describes
+the values accurately and stops the misclassification at its source.
+"""
+
 import json
 import os
 import subprocess
@@ -7,7 +23,7 @@ import subprocess
 # and the call would hang; fail after a bounded wait instead.
 OP_TIMEOUT = 30
 
-def check_1password_cli() -> tuple:
+def check_op_cli() -> tuple:
     """Check if 1Password CLI is installed and authenticated.
     
     Returns:

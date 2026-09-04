@@ -12,9 +12,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 from . import __version__
-from ._1password import (
+from ._op import (
     OP_TIMEOUT,
-    check_1password_cli,
+    check_op_cli,
     create_ssh_key,
     get_vaults,
     list_ssh_keys,
@@ -195,7 +195,7 @@ class CloudXSetup:
             return None, None
     
     def __init__(self, profile: str = "cloudX", ssh_key: str = "cloudX", ssh_config: str | None = None,
-                 ssh_dir: str | None = None, aws_env: str | None = None, use_1password: str | None = None, instance_id: str | None = None,
+                 ssh_dir: str | None = None, aws_env: str | None = None, op_vault: str | None = None, instance_id: str | None = None,
                  ssh_host_prefix: str = "cloudx", non_interactive: bool = False, dry_run: bool = False):
         """Initialize cloudx-proxy setup.
         
@@ -205,7 +205,7 @@ class CloudXSetup:
             ssh_config: SSH config file path (default: None)
             ssh_dir: Directory for SSH keys and config (default: None)
             aws_env: AWS environment directory (default: None)
-            use_1password: 1Password vault to use for the SSH key, which also
+            op_vault: 1Password vault to use for the SSH key, which also
                 turns the 1Password SSH agent on. None or False disables it,
                 True or "true" selects the default "Private" vault, and any
                 other string names the vault. Holds a vault name, never a
@@ -220,23 +220,25 @@ class CloudXSetup:
         self.aws_env = aws_env
         self.ssh_host_prefix = ssh_host_prefix
         
-        # Handle 1Password integration. The flag arrives as None, as a bool, or
-        # as a vault name; note that False must disable it, not enable it.
-        if use_1password is None or use_1password is False:
-            self.use_1password = False
+        # Handle 1Password integration. The flag arrives as None, as a bool,
+        # or as a vault name; note that False must disable it, not enable it.
+        # These are named op_* rather than *_1password on purpose - see the
+        # naming rule at the top of _op.py.
+        if op_vault is None or op_vault is False:
+            self.op_enabled = False
             self.op_vault = None
-        elif use_1password is True or str(use_1password).lower() == 'true':
-            self.use_1password = True
+        elif op_vault is True or str(op_vault).lower() == 'true':
+            self.op_enabled = True
             self.op_vault = "Private"  # Default vault
         else:
-            self.use_1password = True
-            self.op_vault = use_1password
+            self.op_enabled = True
+            self.op_vault = op_vault
         self.instance_id = instance_id
         self.non_interactive = non_interactive
         self.dry_run = dry_run
         self.home_dir = str(Path.home())
-        self.onepassword_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
-        self.onepassword_agent_sock_macos = Path(self.home_dir) / "Library" / "Group Containers" / "2BUA8C4S2C.com.1password" / "t" / "agent.sock"
+        self.op_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
+        self.op_agent_sock_macos = Path(self.home_dir) / "Library" / "Group Containers" / "2BUA8C4S2C.com.1password" / "t" / "agent.sock"
         
         self.pending_migration = False
         
@@ -265,12 +267,12 @@ class CloudXSetup:
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.default_env = None
 
-    def _ensure_onepassword_agent_symlink(self) -> bool:
+    def _ensure_op_agent_symlink(self) -> bool:
         """Ensure ~/.1password/agent.sock points to the macOS agent location."""
         if platform.system() != 'Darwin':
             return False
 
-        if not self.onepassword_agent_sock_macos.exists():
+        if not self.op_agent_sock_macos.exists():
             self.print_status(
                 "macOS default 1Password agent socket not found at ~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
                 False,
@@ -279,24 +281,24 @@ class CloudXSetup:
             return False
 
         try:
-            self.onepassword_agent_sock.parent.mkdir(parents=True, exist_ok=True)
+            self.op_agent_sock.parent.mkdir(parents=True, exist_ok=True)
 
-            if self.onepassword_agent_sock.exists() or self.onepassword_agent_sock.is_symlink():
+            if self.op_agent_sock.exists() or self.op_agent_sock.is_symlink():
                 try:
-                    current_target = self.onepassword_agent_sock.resolve(strict=False)
+                    current_target = self.op_agent_sock.resolve(strict=False)
                 except FileNotFoundError:
                     current_target = None
 
-                if self.onepassword_agent_sock.is_symlink() and current_target == self.onepassword_agent_sock_macos:
+                if self.op_agent_sock.is_symlink() and current_target == self.op_agent_sock_macos:
                     self.print_status("1Password agent symlink already points to default location", True, 2)
                     return True
 
-                if not self.onepassword_agent_sock.is_symlink():
+                if not self.op_agent_sock.is_symlink():
                     # Not a symlink: 1Password can be configured to put its
                     # agent here directly, so this may be a live socket. Do not
                     # delete someone's running agent without being told to.
                     self.print_status(
-                        f"{self.onepassword_agent_sock} exists and is not a symlink", False, 2
+                        f"{self.op_agent_sock} exists and is not a symlink", False, 2
                     )
                     self.print_status(
                         "A running 1Password agent may be listening on it", None, 2
@@ -313,9 +315,9 @@ class CloudXSetup:
                         return False
 
                 self.print_status("Replacing existing 1Password agent socket entry", None, 2)
-                self.onepassword_agent_sock.unlink(missing_ok=True)
+                self.op_agent_sock.unlink(missing_ok=True)
 
-            self.onepassword_agent_sock.symlink_to(self.onepassword_agent_sock_macos)
+            self.op_agent_sock.symlink_to(self.op_agent_sock_macos)
             self.print_status("Created symlink to 1Password agent socket", True, 2)
             return True
         except Exception as e:
@@ -553,19 +555,19 @@ class CloudXSetup:
             self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return False
 
-    def _check_1password_availability(self) -> bool:
+    def _check_op_availability(self) -> bool:
         """Check if 1Password CLI and SSH agent are available.
         
         Returns:
             bool: True if 1Password is available and configured
         """
-        if not self.use_1password:
+        if not self.op_enabled:
             return False
             
         self.print_status("Checking 1Password availability...")
         
         # Use our helper function to check 1Password CLI
-        installed, authenticated, version = check_1password_cli()
+        installed, authenticated, version = check_op_cli()
         
         if not installed:
             self.print_status("1Password CLI not found. Please install it from https://1password.com/downloads/command-line/", False, 2)
@@ -580,23 +582,23 @@ class CloudXSetup:
         self.print_status("1Password CLI is authenticated", True, 2)
         
         # Check if 1Password SSH agent socket exists at ~/.1password/agent.sock
-        if not self.onepassword_agent_sock.exists():
+        if not self.op_agent_sock.exists():
             self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
 
-            if not self._ensure_onepassword_agent_symlink():
+            if not self._ensure_op_agent_symlink():
                 self.print_status("1Password SSH agent is not available", False, 2)
                 self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
                 self.print_status("1Password integration is not supported in this configuration", False, 2)
                 return False
-        elif platform.system() == 'Darwin' and self.onepassword_agent_sock.is_symlink():
+        elif platform.system() == 'Darwin' and self.op_agent_sock.is_symlink():
             try:
-                current_target = self.onepassword_agent_sock.resolve(strict=False)
+                current_target = self.op_agent_sock.resolve(strict=False)
             except FileNotFoundError:
                 current_target = None
 
-            if current_target != self.onepassword_agent_sock_macos and self.onepassword_agent_sock_macos.exists():
+            if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
                 self.print_status("Updating 1Password agent symlink to default location", None, 2)
-                if not self._ensure_onepassword_agent_symlink():
+                if not self._ensure_op_agent_symlink():
                     self.print_status("1Password integration is not supported in this configuration", False, 2)
                     return False
         
@@ -610,7 +612,7 @@ class CloudXSetup:
         
         return True
 
-    def _create_1password_key(self) -> bool:
+    def _create_op_key(self) -> bool:
         """Create a new SSH key in 1Password.
         
         Returns:
@@ -745,7 +747,7 @@ class CloudXSetup:
         
         if self.dry_run:
             self.print_status(f"[DRY RUN] Would check SSH key '{self.ssh_key}' configuration")
-            if self.use_1password:
+            if self.op_enabled:
                 self.print_status("[DRY RUN] Would use 1Password SSH agent for authentication", None, 2)
                 self.print_status(f"[DRY RUN] Would create or find SSH key in vault: {self.op_vault}", None, 2)
             else:
@@ -754,13 +756,13 @@ class CloudXSetup:
             return True
         
         # Check 1Password integration if requested
-        if self.use_1password:
-            op_available = self._check_1password_availability()
+        if self.op_enabled:
+            op_available = self._check_op_availability()
             if op_available:
                 self.print_status("Using 1Password SSH agent for authentication", True, 2)
                 
                 # Always prefer to create keys in 1Password
-                return self._create_1password_key()
+                return self._create_op_key()
             else:
                 # 1Password was asked for explicitly. Falling back to an
                 # on-disk key changes the authentication mechanism, so in
@@ -778,7 +780,7 @@ class CloudXSetup:
                 proceed = self.prompt("1Password integration not available. Continue with standard SSH key setup?", "Y").lower() != "n"
                 if not proceed:
                     return False
-                self.use_1password = False  # Fallback to standard setup
+                self.op_enabled = False  # Fallback to standard setup
         
         self.print_status(f"Checking SSH key '{self.ssh_key}' configuration...")
         
@@ -891,7 +893,7 @@ class CloudXSetup:
         Returns:
             str: SSH config authentication section
         """
-        if self.use_1password:
+        if self.op_enabled:
             # When using 1Password:
             # 1. Set IdentityAgent to the 1Password socket (literal tilde for SSH compatibility)
             # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search

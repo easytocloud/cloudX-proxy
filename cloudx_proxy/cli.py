@@ -144,7 +144,9 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--aws-env', help='AWS environment directory (default: ~/.aws, use name of directory in ~/.aws/aws-envs/)')
 @click.option(
     '--1password',
-    'use_1password',
+    # The flag keeps the product's name; the variable behind it is op_* like
+    # every other 1Password identifier - see the naming rule in _op.py
+    'op_vault',
     # Click's optional-value form: absent -> None, bare -> flag_value,
     # given a value -> that value
     is_flag=False,
@@ -159,7 +161,7 @@ def connect(instance_id: str, port: int, profile: str, region: str, ssh_key: str
 @click.option('--ssh-host-prefix', help='Prefix for SSH hosts (default: cloudx or cloudX depending on command name)')
 @click.option('--yes', 'non_interactive', is_flag=True, help='Non-interactive mode, use default values for all prompts')
 @click.option('--dry-run', is_flag=True, help='Preview setup changes without executing')
-def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, use_1password: str,
+def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: str, op_vault: str,
           instance: str, hostname: str, environment: str, ssh_host_prefix: str,
           non_interactive: bool, dry_run: bool):
     """Set up AWS profile, SSH keys, and configuration for CloudX.
@@ -195,7 +197,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
             ssh_config=ssh_config,
             ssh_dir=ssh_dir,
             aws_env=aws_env,
-            use_1password=use_1password,
+            op_vault=op_vault,
             instance_id=instance,
             ssh_host_prefix=ssh_host_prefix,
             non_interactive=non_interactive,

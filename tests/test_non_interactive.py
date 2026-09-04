@@ -78,19 +78,19 @@ class TestConfirmContinueAfterError:
         assert setup.confirm_continue_after_error("test failure") is False
 
 
-class TestOnePasswordIsNotSilentlySubstituted:
-    def test_unavailable_1password_fails_under_yes(self, tmp_path, monkeypatch):
+class TestOpIsNotSilentlySubstituted:
+    def test_unavailable_op_fails_under_yes(self, tmp_path, monkeypatch):
         setup = CloudXSetup(
             ssh_dir=str(tmp_path / "ssh"),
-            use_1password="Private",
+            op_vault="Private",
             non_interactive=True,
         )
-        monkeypatch.setattr(setup, "_check_1password_availability", lambda: False)
+        monkeypatch.setattr(setup, "_check_op_availability", lambda: False)
 
         assert setup.setup_ssh_key() is False, (
             "must not quietly fall back to an on-disk key when 1Password was asked for"
         )
-        assert setup.use_1password is True, "the request must not be rewritten"
+        assert setup.op_enabled is True, "the request must not be rewritten"
 
 
 class TestDryRunDoesNotCallAws:

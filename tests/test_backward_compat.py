@@ -167,7 +167,7 @@ Host cloudX-dev-web1
 FIXTURES = {
     "single_host": (V017_SINGLE_HOST, {"ssh_host_prefix": "cloudx"}),
     "multi_host": (V017_MULTI_HOST, {"ssh_host_prefix": "cloudx"}),
-    "onepassword": (V017_ONEPASSWORD, {"ssh_host_prefix": "cloudx", "use_1password": "Private"}),
+    "onepassword": (V017_ONEPASSWORD, {"ssh_host_prefix": "cloudx", "op_vault": "Private"}),
     "aws_env": (V017_AWS_ENV, {"ssh_host_prefix": "cloudx", "aws_env": "acme"}),
     "uppercase": (V017_UPPERCASE, {"ssh_host_prefix": "cloudX"}),
 }

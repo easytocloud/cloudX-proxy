@@ -21,8 +21,8 @@ def run_setup(tmp_path, monkeypatch, extra_args):
     return CliRunner().invoke(cli, ["setup", "--dry-run", "--yes", "--instance", "i-0123456789abcdef0", "--hostname", "web1", "--environment", "dev", "--ssh-config", str(tmp_path / "cloudX" / "config"), *extra_args])
 
 
-class TestOnePasswordOption:
-    def test_omitted_means_no_1password(self, tmp_path, monkeypatch):
+class TestOpVaultOption:
+    def test_omitted_means_no_op(self, tmp_path, monkeypatch):
         result = run_setup(tmp_path, monkeypatch, [])
 
         assert result.exit_code == 0, result.output
