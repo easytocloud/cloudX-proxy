@@ -178,7 +178,11 @@ class TestSshProbeIsNonInteractive:
         cmd = captured["cmd"]
         assert "BatchMode=yes" in cmd
         assert "StrictHostKeyChecking=accept-new" in cmd
-        assert cmd[-2:] == ["cloudx-dev-web1", "exit"]
+        # A bare 'exit' propagates whatever $? the remote shell's
+        # non-interactive startup files already set, which can be non-zero
+        # on a perfectly healthy connection - the probe needs an explicit
+        # status so its result reflects SSH connectivity, not shell startup.
+        assert cmd[-2:] == ["cloudx-dev-web1", "exit 0"]
         assert captured["kwargs"]["timeout"] > 0
 
 
