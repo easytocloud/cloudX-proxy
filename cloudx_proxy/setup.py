@@ -239,6 +239,12 @@ class CloudXSetup:
         self.home_dir = str(Path.home())
         self.op_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         self.op_agent_sock_macos = Path(self.home_dir) / "Library" / "Group Containers" / "2BUA8C4S2C.com.1password" / "t" / "agent.sock"
+        # The Linux snap package keeps its agent inside the snap's own home
+        # rather than at ~/.1password/agent.sock.
+        self.op_agent_sock_snap = Path(self.home_dir) / "snap" / "1password" / "current" / ".1password" / "agent.sock"
+        # Set by _check_op_agent() when the agent was found somewhere other
+        # than the default socket. None means "write the default".
+        self.op_agent_override = None
         
         self.pending_migration = False
         
@@ -266,6 +272,95 @@ class CloudXSetup:
         
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.default_env = None
+
+    # On Windows the 1Password SSH agent serves the standard OpenSSH named
+    # pipe, which ssh talks to by default. There is no socket file to find
+    # and no IdentityAgent directive to write.
+    OP_AGENT_PIPE_WINDOWS = r'\\.\pipe\openssh-ssh-agent'
+
+    def _windows_agent_pipe_exists(self) -> bool:
+        """Check whether an SSH agent is listening on the standard OpenSSH pipe."""
+        pipe_name = self.OP_AGENT_PIPE_WINDOWS.rsplit('\\', 1)[-1]
+        try:
+            return pipe_name in os.listdir(r'\\.\pipe')
+        except OSError:
+            # Enumerating the pipe namespace is not guaranteed to work; fall
+            # back to probing the pipe directly.
+            return os.path.exists(self.OP_AGENT_PIPE_WINDOWS)
+
+    def _check_op_agent(self) -> bool:
+        """Check that the 1Password SSH agent is reachable on this platform.
+
+        Sets self.op_agent_override when the agent was found somewhere other
+        than ~/.1password/agent.sock, so the SSH config points at the socket
+        that actually exists.
+
+        Returns:
+            bool: True if an agent was found.
+        """
+        system = platform.system()
+
+        if system == 'Windows':
+            if not self._windows_agent_pipe_exists():
+                self.print_status(
+                    f"No SSH agent listening on {self.OP_AGENT_PIPE_WINDOWS}", False, 2
+                )
+                self.print_status(
+                    "Enable the SSH agent in 1Password: Settings > Developer > Use the SSH agent",
+                    None,
+                    2,
+                )
+                self.print_status("1Password integration is not supported in this configuration", False, 2)
+                return False
+            self.print_status("1Password SSH agent pipe is available", True, 2)
+            return True
+
+        if self.op_agent_sock.exists():
+            if system == 'Darwin' and self.op_agent_sock.is_symlink():
+                try:
+                    current_target = self.op_agent_sock.resolve(strict=False)
+                except FileNotFoundError:
+                    current_target = None
+
+                if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
+                    self.print_status("Updating 1Password agent symlink to default location", None, 2)
+                    if not self._ensure_op_agent_symlink():
+                        self.print_status("1Password integration is not supported in this configuration", False, 2)
+                        return False
+
+            self.print_status("1Password SSH agent socket is available", True, 2)
+            return True
+
+        self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
+
+        if system == 'Darwin':
+            if self._ensure_op_agent_symlink():
+                self.print_status("1Password SSH agent socket is available", True, 2)
+                return True
+        elif self.op_agent_sock_snap.exists():
+            # Snap install: use the snap's socket where it is rather than
+            # symlinking into a home directory the snap does not see.
+            self.op_agent_override = "~/snap/1password/current/.1password/agent.sock"
+            self.print_status("Using the snap 1Password SSH agent socket", True, 2)
+            return True
+
+        self.print_status("1Password SSH agent is not available", False, 2)
+        self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
+        self.print_status("1Password integration is not supported in this configuration", False, 2)
+        return False
+
+    def _op_identity_agent(self) -> str | None:
+        """The IdentityAgent value for the 1Password agent, or None to omit it.
+
+        Nothing is written on Windows: ssh reaches the 1Password agent over the
+        standard OpenSSH named pipe without being told to, and pointing
+        IdentityAgent at a Unix socket path there would aim ssh at nothing and
+        break an agent that already works.
+        """
+        if platform.system() == 'Windows':
+            return None
+        # A literal tilde, left for ssh to expand.
+        return self.op_agent_override or "~/.1password/agent.sock"
 
     def _ensure_op_agent_symlink(self) -> bool:
         """Ensure ~/.1password/agent.sock points to the macOS agent location."""
@@ -581,28 +676,10 @@ class CloudXSetup:
         
         self.print_status("1Password CLI is authenticated", True, 2)
         
-        # Check if 1Password SSH agent socket exists at ~/.1password/agent.sock
-        if not self.op_agent_sock.exists():
-            self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
-
-            if not self._ensure_op_agent_symlink():
-                self.print_status("1Password SSH agent is not available", False, 2)
-                self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
-                self.print_status("1Password integration is not supported in this configuration", False, 2)
-                return False
-        elif platform.system() == 'Darwin' and self.op_agent_sock.is_symlink():
-            try:
-                current_target = self.op_agent_sock.resolve(strict=False)
-            except FileNotFoundError:
-                current_target = None
-
-            if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
-                self.print_status("Updating 1Password agent symlink to default location", None, 2)
-                if not self._ensure_op_agent_symlink():
-                    self.print_status("1Password integration is not supported in this configuration", False, 2)
-                    return False
-        
-        self.print_status("1Password SSH agent socket is available", True, 2)
+        # Check that the 1Password SSH agent is reachable. Where it lives is
+        # platform-specific, so this is not a single path test.
+        if not self._check_op_agent():
+            return False
         
         # If using a vault other than "Private", warn the user
         if self.op_vault and self.op_vault != "Private":
@@ -895,12 +972,21 @@ class CloudXSetup:
         """
         if self.op_enabled:
             # When using 1Password:
-            # 1. Set IdentityAgent to the 1Password socket (literal tilde for SSH compatibility)
-            # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search
-            # (IdentitiesOnly is now set globally for all cloudX hosts)
-            return """    IdentityAgent ~/.1password/agent.sock
-    IdentityFile {}
-""".format(self.quote_config_value(f"{self.ssh_key_file}.pub"))
+            # 1. Point IdentityAgent at the 1Password socket, where one has to
+            #    be named at all - see _op_identity_agent()
+            # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search.
+            #    IdentitiesOnly yes is set globally for all cloudX hosts, and
+            #    ssh offers only identities named by IdentityFile even when the
+            #    agent holds more - so the .pub is what lets the agent's copy of
+            #    the key be used at all.
+            lines = []
+            identity_agent = self._op_identity_agent()
+            if identity_agent:
+                lines.append(f"    IdentityAgent {identity_agent}")
+            lines.append(
+                f"    IdentityFile {self.quote_config_value(f'{self.ssh_key_file}.pub')}"
+            )
+            return "\n".join(lines) + "\n"
         else:
             # Standard SSH key configuration
             # (IdentitiesOnly is now set globally for all cloudX hosts)

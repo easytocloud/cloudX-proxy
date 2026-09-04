@@ -675,7 +675,9 @@ These permissions are required to bootstrap the instance, so that after creation
    - **Region mismatch** - Ensure AWS profile region matches instance location
 
 4. **SSH Key Issues**
-   - If using 1Password SSH agent, verify agent is running (~/.1password/agent.sock exists)
+   - If using 1Password SSH agent, verify the agent is running. Where it lives depends on the platform:
+     * macOS/Linux: `~/.1password/agent.sock` exists (Linux snap installs: `~/snap/1password/current/.1password/agent.sock`)
+     * Windows: 1Password serves the standard OpenSSH named pipe `\\.\pipe\openssh-ssh-agent`, which ssh uses by default - there is no socket file and no `IdentityAgent` line is written
    - Check file permissions (600 for private key, 644 for public key)
    - Verify the public key is being successfully pushed to the instance
    - For 1Password-managed keys, make sure:

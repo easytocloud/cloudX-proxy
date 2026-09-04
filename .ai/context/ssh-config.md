@@ -66,7 +66,14 @@ Host cloudX-Prod-*
 
 **Settings explained**:
 - `IdentityFile`: Path to the SSH private key for this environment
-- `IdentitiesOnly yes`: Only use the specified key, don't try others from ssh-agent
+- `IdentitiesOnly yes`: Only use the specified key, don't try others from ssh-agent.
+  With 1Password this is why `IdentityFile` names the *public* key: ssh offers only
+  identities named by `IdentityFile`, even when the agent holds more, so the `.pub`
+  is what lets the agent's copy of the key be used at all.
+- `IdentityAgent`: Only written with `--1password`, and only where the agent has to be
+  named: `~/.1password/agent.sock` on macOS and Linux (or the snap path on snap
+  installs). Nothing is written on Windows, where 1Password serves the standard
+  OpenSSH named pipe `\\.\pipe\openssh-ssh-agent` that ssh already uses by default.
 - `ProxyCommand`: The cloudX-proxy connect command that:
   - Checks if the instance is running (starts it if needed)
   - Pushes the SSH public key to the instance
