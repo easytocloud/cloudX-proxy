@@ -1960,7 +1960,7 @@ class CloudXSetup:
                     '-o', 'BatchMode=yes',
                     '-o', 'StrictHostKeyChecking=accept-new',
                     '-o', 'ConnectTimeout=10',
-                    ssh_host, 'exit'
+                    ssh_host, 'exit 0'
                 ],
                 capture_output=True,
                 text=True,
