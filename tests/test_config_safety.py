@@ -172,3 +172,116 @@ class TestIdentityFileQuoting:
 
         assert f'IdentityFile {tmp_path / "ssh" / "cloudX"}' in auth
         assert '"' not in auth
+
+
+class TestExistingIdentityFileIsRequoted:
+    """Quoting new IdentityFile values was not enough.
+
+    A configuration written before the quoting fix still carries the unquoted
+    form, and neither `cleanup` nor adding a host regenerates that line -
+    `cleanup` rebuilds only the ProxyCommand, and `setup` leaves an existing
+    environment block alone. So a spaced key path stayed unparseable by ssh
+    even after running both. It is now repaired in place on any rewrite.
+    """
+
+    SPACED = """Host cloudx-*
+    User ec2-user
+
+Host cloudx-dev-*
+    IdentityFile {ssh_dir}/cloudX
+    ProxyCommand uvx cloudx-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+"""
+
+    def spaced_setup(self, tmp_path):
+        ssh_dir = tmp_path / "My SSH Dir"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text(self.SPACED.format(ssh_dir=ssh_dir))
+        return CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", non_interactive=True
+        ), ssh_dir
+
+    def test_cleanup_quotes_an_existing_spaced_path(self, tmp_path):
+        setup, ssh_dir = self.spaced_setup(tmp_path)
+
+        assert setup.cleanup_config() is True
+
+        assert f'IdentityFile "{ssh_dir}/cloudX"' in setup.ssh_config_file.read_text()
+
+    def test_adding_a_host_also_repairs_it(self, tmp_path):
+        setup, ssh_dir = self.spaced_setup(tmp_path)
+
+        assert setup.setup_ssh_config("dev", "i-1111111111111111a", "web2") is True
+
+        result = setup.ssh_config_file.read_text()
+        assert f'IdentityFile "{ssh_dir}/cloudX"' in result
+        assert "Host cloudx-dev-web2" in result
+
+    def test_the_value_is_wrapped_not_rebuilt(self, tmp_path):
+        """A hand-edited path must survive; we only add the quotes."""
+        ssh_dir = tmp_path / "My SSH Dir"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text("""Host cloudx-*
+    User ec2-user
+
+Host cloudx-dev-*
+    IdentityFile /somewhere/else entirely/my own key
+    ProxyCommand uvx cloudx-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", non_interactive=True
+        )
+
+        setup.cleanup_config()
+
+        assert 'IdentityFile "/somewhere/else entirely/my own key"' in setup.ssh_config_file.read_text()
+
+    def test_requoting_is_idempotent(self, tmp_path):
+        setup, _ = self.spaced_setup(tmp_path)
+
+        setup.cleanup_config()
+        once = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+
+        assert setup.ssh_config_file.read_text() == once
+        assert once.count('IdentityFile "') == 1
+
+
+class TestRequotePathDirective:
+    def test_spaced_value_is_quoted(self, setup):
+        assert setup._requote_path_directive(
+            "    IdentityFile /a b/c"
+        ) == '    IdentityFile "/a b/c"'
+
+    def test_indentation_and_spacing_are_preserved(self, setup):
+        assert setup._requote_path_directive(
+            "\tIdentityFile   /a b/c"
+        ) == '\tIdentityFile   "/a b/c"'
+
+    def test_already_quoted_is_untouched(self, setup):
+        line = '    IdentityFile "/a b/c"'
+        assert setup._requote_path_directive(line) == line
+
+    def test_value_without_whitespace_is_untouched(self, setup):
+        line = "    IdentityFile /a/b/c"
+        assert setup._requote_path_directive(line) == line
+
+    def test_lowercase_keyword_is_recognised(self, setup):
+        """ssh config keywords are case-insensitive."""
+        assert setup._requote_path_directive(
+            "    identityfile /a b/c"
+        ) == '    identityfile "/a b/c"'
+
+    def test_other_directives_are_untouched(self, setup):
+        for line in ("    User ec2-user", "    ProxyCommand uvx x connect %h %p", ""):
+            assert setup._requote_path_directive(line) == line
+
+    def test_a_value_containing_a_quote_is_left_alone(self, setup):
+        """Not safely wrappable; leave it rather than corrupt it."""
+        line = '    IdentityFile /a "b/c d'
+        assert setup._requote_path_directive(line) == line

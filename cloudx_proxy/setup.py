@@ -965,8 +965,43 @@ class CloudXSetup:
 
         return preamble, blocks, pending
 
-    @staticmethod
-    def _clean_managed_lines(lines: list) -> list:
+    # Directives this tool writes whose value is a path the user controls, and
+    # which may therefore contain whitespace. ssh keywords are case-insensitive.
+    _PATH_DIRECTIVE_RE = re.compile(r'^(\s*)(IdentityFile)(\s+)(\S.*)$', re.IGNORECASE)
+
+    @classmethod
+    def _requote_path_directive(cls, line: str) -> str:
+        """Quote a path-valued directive whose value contains whitespace.
+
+        ssh_config(5) splits a directive's arguments on whitespace unless they
+        are double quoted, so `IdentityFile /home/First Last/.ssh/cloudX` does
+        not name the file it appears to. Configurations written before that was
+        handled still carry the unquoted form, and neither a rewrite nor adding
+        a host regenerates the line, so it is repaired in place here.
+
+        The value is wrapped, never rebuilt: a path someone edited by hand stays
+        the path they chose. Values that need no quoting, are already quoted, or
+        contain a quote of their own are returned untouched.
+
+        Args:
+            line: A single configuration line
+
+        Returns:
+            str: The line, quoted if it needed it
+        """
+        match = cls._PATH_DIRECTIVE_RE.match(line)
+        if not match:
+            return line
+
+        indent, keyword, gap, value = match.groups()
+        value = value.rstrip()
+        if '"' in value or not re.search(r'\s', value):
+            return line
+
+        return f'{indent}{keyword}{gap}"{value}"'
+
+    @classmethod
+    def _clean_managed_lines(cls, lines: list) -> list:
         """Strip comments and blank lines from a block cloudx-proxy manages.
 
         The header line is kept verbatim so inline comments on Host entries
@@ -989,6 +1024,7 @@ class CloudXSetup:
                 continue
             if '#' in line:
                 line = line.split('#')[0].rstrip()
+            line = cls._requote_path_directive(line)
             cleaned.append(line.rstrip())
         return cleaned
 
