@@ -1,3 +1,10 @@
+## [0.17.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.2...v0.17.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* connectivity check reports false failure on healthy connections ([29e3717](https://github.com/easytocloud/cloudX-proxy/commit/29e3717d4d3d85f0f37290d597d79a3e99b6e637))
+
 ## [0.17.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.1...v0.17.2) (2026-09-04)
 
 
