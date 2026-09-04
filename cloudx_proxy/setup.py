@@ -1591,6 +1591,47 @@ class CloudXSetup:
             self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return self.confirm_continue_after_error("SSH config issues")
 
+    # Flags a ProxyCommand can carry, with their values quoted or bare
+    _PROXY_FLAG_RE = re.compile(r'''(--[\w-]+)\s+("[^"]*"|'[^']*'|[^\s-]\S*)''')
+
+    def _rebuild_proxy_command(self, line: str) -> str:
+        """Rebuild a ProxyCommand, keeping every flag it already carried.
+
+        The rebuild exists to drop flags that merely restate an auto-detected
+        default, but it recomputes them from this process's own defaults, which
+        are not the ones the line was written with. Left to itself it deletes
+        settings that are doing real work: an explicit `--profile cloudx` was
+        dropped because the default detected here is `cloudX`, and since AWS
+        profile names are case-sensitive the next connection failed with "The
+        config profile (cloudX) could not be found".
+
+        A flag the rebuild does not reproduce is therefore carried over rather
+        than discarded. Cleanup may tidy the configuration; it may not decide
+        that part of it was unnecessary.
+
+        Args:
+            line: The existing ProxyCommand line
+
+        Returns:
+            str: The rebuilt command, with nothing lost
+        """
+        existing = dict(self._PROXY_FLAG_RE.findall(line))
+
+        # aws-env cannot be derived from anything here, so it is fed back in
+        original_aws_env = self.aws_env
+        aws_env = existing.get('--aws-env')
+        self.aws_env = aws_env.strip('"\'') if aws_env else None
+        try:
+            rebuilt = self._build_proxy_command()
+        finally:
+            self.aws_env = original_aws_env
+
+        for flag, value in existing.items():
+            if flag not in rebuilt:
+                rebuilt += f" {flag} {value}"
+
+        return rebuilt
+
     def cleanup_config(self) -> bool:
         """Clean up and reorganize SSH configuration file.
 
@@ -1645,23 +1686,7 @@ class CloudXSetup:
                 new_lines = []
                 for line in env_lines:
                     if line.strip().startswith('ProxyCommand'):
-                        # Extract aws-env from the existing ProxyCommand if
-                        # present, quoted or not
-                        aws_env = None
-                        if '--aws-env' in line:
-                            match = re.search(
-                                r'''--aws-env\s+("[^"]*"|'[^']*'|\S+)''', line
-                            )
-                            if match:
-                                aws_env = match.group(1).strip('"\'')
-
-                        # Temporarily set aws_env for ProxyCommand building
-                        original_aws_env = self.aws_env
-                        self.aws_env = aws_env
-                        optimized_command = self._build_proxy_command()
-                        self.aws_env = original_aws_env
-
-                        new_lines.append(f"    ProxyCommand {optimized_command}")
+                        new_lines.append(f"    ProxyCommand {self._rebuild_proxy_command(line)}")
                     else:
                         new_lines.append(line)
 

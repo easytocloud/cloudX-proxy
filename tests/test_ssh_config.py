@@ -591,3 +591,112 @@ class TestNormalizeManagedHostLine:
 
     def test_a_non_host_line_is_untouched(self, setup):
         assert setup._normalize_managed_host_line("    User ec2-user") == "    User ec2-user"
+
+
+class TestCleanupKeepsProxyCommandFlags:
+    """cleanup rebuilt the ProxyCommand and silently deleted flags.
+
+    The rebuild drops flags that merely restate an auto-detected default, but
+    it recomputes those defaults from the running process rather than from the
+    line it is rewriting. An explicit `--profile cloudx` was therefore removed
+    because the default detected here is `cloudX`; AWS profile names are
+    case-sensitive, so the next connection died with "The config profile
+    (cloudX) could not be found". `--region` was dropped outright, since the
+    rebuild has no notion of it at all.
+    """
+
+    def cleaned(self, tmp_path, proxy_command):
+        home = tmp_path / "home"
+        ssh_dir = home / ".ssh" / "cloudX"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text(f"""Host cloudX-*
+    User ec2-user
+
+Host cloudX-dev-*
+    ProxyCommand {proxy_command}
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_config=str(ssh_dir / "config"), ssh_host_prefix="cloudX",
+            non_interactive=True,
+        )
+        setup.home_dir = str(home)
+        assert setup.cleanup_config() is True
+        for line in setup.ssh_config_file.read_text().splitlines():
+            if line.strip().startswith("ProxyCommand"):
+                return line.strip()
+        raise AssertionError("ProxyCommand disappeared entirely")
+
+    def test_an_explicit_profile_is_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --profile cloudx"
+        )
+        assert "--profile cloudx" in result
+
+    def test_an_explicit_ssh_key_is_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --ssh-key mykey"
+        )
+        assert "--ssh-key mykey" in result
+
+    def test_region_is_kept(self, tmp_path):
+        """The rebuild never emits --region, so it used to vanish."""
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --region eu-central-1"
+        )
+        assert "--region eu-central-1" in result
+
+    def test_aws_env_is_still_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --aws-env prod"
+        )
+        assert "--aws-env prod" in result
+
+    def test_several_flags_all_survive(self, tmp_path):
+        result = self.cleaned(
+            tmp_path,
+            "uvx cloudX-proxy connect %h %p --profile acme --ssh-key mykey "
+            "--region eu-central-1 --aws-env prod",
+        )
+        for flag in ("--profile acme", "--ssh-key mykey",
+                     "--region eu-central-1", "--aws-env prod"):
+            assert flag in result, f"{flag} was dropped"
+
+    def test_no_flag_is_duplicated(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --aws-env prod"
+        )
+        assert result.count("--aws-env") == 1
+
+    def test_a_bare_command_stays_bare(self, tmp_path):
+        """Nothing to preserve means nothing is invented."""
+        result = self.cleaned(tmp_path, "uvx cloudX-proxy connect %h %p")
+        assert result == "ProxyCommand uvx cloudX-proxy connect %h %p"
+
+    def test_repeated_cleanup_is_stable(self, tmp_path):
+        home = tmp_path / "home"
+        ssh_dir = home / ".ssh" / "cloudX"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text("""Host cloudX-*
+    User ec2-user
+
+Host cloudX-dev-*
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile cloudx --region eu-west-3
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_config=str(ssh_dir / "config"), ssh_host_prefix="cloudX",
+            non_interactive=True,
+        )
+        setup.home_dir = str(home)
+
+        setup.cleanup_config()
+        once = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+
+        assert setup.ssh_config_file.read_text() == once
+        assert once.count("--profile cloudx") == 1
