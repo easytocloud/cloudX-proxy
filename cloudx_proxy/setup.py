@@ -25,6 +25,22 @@ from .colors import format_command, format_path, header, info, status_symbol, wa
 from .colors import prompt as color_prompt
 
 
+def plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """Render a count with its noun: '1 environment', '2 environments'.
+
+    Args:
+        count: How many
+        singular: The noun as written for one
+        plural_form: The noun for any other count, when adding 's' is wrong
+
+    Returns:
+        str: The count and the noun that agrees with it
+    """
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {plural_form or singular + 's'}"
+
+
 class CloudXSetup:
     # Define SSH key prefix as a constant
     SSH_KEY_PREFIX = "cloudX SSH Key - "
@@ -239,6 +255,12 @@ class CloudXSetup:
         self.home_dir = str(Path.home())
         self.op_agent_sock = Path(self.home_dir) / ".1password" / "agent.sock"
         self.op_agent_sock_macos = Path(self.home_dir) / "Library" / "Group Containers" / "2BUA8C4S2C.com.1password" / "t" / "agent.sock"
+        # The Linux snap package keeps its agent inside the snap's own home
+        # rather than at ~/.1password/agent.sock.
+        self.op_agent_sock_snap = Path(self.home_dir) / "snap" / "1password" / "current" / ".1password" / "agent.sock"
+        # Set by _check_op_agent() when the agent was found somewhere other
+        # than the default socket. None means "write the default".
+        self.op_agent_override = None
         
         self.pending_migration = False
         
@@ -266,6 +288,98 @@ class CloudXSetup:
         
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.default_env = None
+        # Name of the host entry last written, which is not necessarily the
+        # configured case: an entry already in the config keeps its own name.
+        self.last_host_entry_name = None
+
+    # On Windows the 1Password SSH agent serves the standard OpenSSH named
+    # pipe, which ssh talks to by default. There is no socket file to find
+    # and no IdentityAgent directive to write.
+    OP_AGENT_PIPE_WINDOWS = r'\\.\pipe\openssh-ssh-agent'
+
+    def _windows_agent_pipe_exists(self) -> bool:
+        """Check whether an SSH agent is listening on the standard OpenSSH pipe."""
+        pipe_name = self.OP_AGENT_PIPE_WINDOWS.rsplit('\\', 1)[-1]
+        try:
+            return pipe_name in os.listdir(r'\\.\pipe')
+        except OSError:
+            # Enumerating the pipe namespace is not guaranteed to work; fall
+            # back to probing the pipe directly.
+            return os.path.exists(self.OP_AGENT_PIPE_WINDOWS)
+
+    def _check_op_agent(self) -> bool:
+        """Check that the 1Password SSH agent is reachable on this platform.
+
+        Sets self.op_agent_override when the agent was found somewhere other
+        than ~/.1password/agent.sock, so the SSH config points at the socket
+        that actually exists.
+
+        Returns:
+            bool: True if an agent was found.
+        """
+        system = platform.system()
+
+        if system == 'Windows':
+            if not self._windows_agent_pipe_exists():
+                self.print_status(
+                    f"No SSH agent listening on {self.OP_AGENT_PIPE_WINDOWS}", False, 2
+                )
+                self.print_status(
+                    "Enable the SSH agent in 1Password: Settings > Developer > Use the SSH agent",
+                    None,
+                    2,
+                )
+                self.print_status("1Password integration is not supported in this configuration", None, 2)
+                return False
+            self.print_status("1Password SSH agent pipe is available", True, 2)
+            return True
+
+        if self.op_agent_sock.exists():
+            if system == 'Darwin' and self.op_agent_sock.is_symlink():
+                try:
+                    current_target = self.op_agent_sock.resolve(strict=False)
+                except FileNotFoundError:
+                    current_target = None
+
+                if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
+                    self.print_status("Updating 1Password agent symlink to default location", None, 2)
+                    if not self._ensure_op_agent_symlink():
+                        self.print_status("1Password integration is not supported in this configuration", None, 2)
+                        return False
+
+            self.print_status("1Password SSH agent socket is available", True, 2)
+            return True
+
+        self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", None, 2)
+
+        if system == 'Darwin':
+            if self._ensure_op_agent_symlink():
+                self.print_status("1Password SSH agent socket is available", True, 2)
+                return True
+        elif self.op_agent_sock_snap.exists():
+            # Snap install: use the snap's socket where it is rather than
+            # symlinking into a home directory the snap does not see.
+            self.op_agent_override = "~/snap/1password/current/.1password/agent.sock"
+            self.print_status("Using the snap 1Password SSH agent socket", True, 2)
+            return True
+
+        self.print_status("1Password SSH agent is not available", False, 2)
+        self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
+        self.print_status("1Password integration is not supported in this configuration", None, 2)
+        return False
+
+    def _op_identity_agent(self) -> str | None:
+        """The IdentityAgent value for the 1Password agent, or None to omit it.
+
+        Nothing is written on Windows: ssh reaches the 1Password agent over the
+        standard OpenSSH named pipe without being told to, and pointing
+        IdentityAgent at a Unix socket path there would aim ssh at nothing and
+        break an agent that already works.
+        """
+        if platform.system() == 'Windows':
+            return None
+        # A literal tilde, left for ssh to expand.
+        return self.op_agent_override or "~/.1password/agent.sock"
 
     def _ensure_op_agent_symlink(self) -> bool:
         """Ensure ~/.1password/agent.sock points to the macOS agent location."""
@@ -327,18 +441,42 @@ class CloudXSetup:
     def print_header(self, text: str) -> None:
         """Print a section header.
 
+        One blank line separates it from what came before. The caller printing
+        the banner above the first section does not add one of its own, or the
+        two stack into a gap.
+
         Args:
             text: The header text
         """
-        print(f"\n\n{header(f'=== {text} ===')}")
+        print(f"\n{header(f'=== {text} ===')}")
+
+    # Output grid. Three indents and three symbols, used the same way
+    # everywhere, so a run can be skimmed down the left edge:
+    #
+    #   === Section ===          a phase of the command (print_header)
+    #   ○ Doing something...     STEP:   one operation within the section
+    #     ✓ It worked            DETAIL: what that step found or did
+    #       ○ ...                SUB:    detail of a nested operation
+    #
+    #   ○  neutral - about to happen, in progress, informational, or a
+    #      dry-run preview
+    #   ✓  true now - succeeded, exists, verified
+    #   ✗  wrong - failed, missing, invalid. The problem takes the ✗; its
+    #      consequences and the advice that follows are ○, so one failure
+    #      shows as one ✗.
+    INDENT_STEP = 0
+    INDENT_DETAIL = 2
+    INDENT_SUB = 4
 
     def print_status(self, message: str, status: bool | None = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
 
         Args:
             message: The message to print
-            status: True for success (✓), False for failure (✗), None for no symbol
-            indent: Number of spaces to indent
+            status: True for success (✓), False for failure (✗), None for
+                neutral (○) - see the output grid above
+            indent: Number of spaces to indent: 0 for a step, 2 for a detail
+                of it, 4 for a detail of a nested operation
         """
         prefix = " " * indent
         print(f"{prefix}{status_symbol(status)} {message}")
@@ -433,10 +571,12 @@ class CloudXSetup:
         self.print_header("Prerequisites")
 
         if self.dry_run:
+            self.print_status("[DRY RUN] Would check for required tools")
             for tool in self.REQUIRED_TOOLS:
                 self.print_status(f"[DRY RUN] Would check for {tool}", None, 2)
             return True
 
+        self.print_status("Checking required tools...")
         all_found = True
         for tool, install_url in self.REQUIRED_TOOLS.items():
             name = f"{tool}.exe" if platform.system() == 'Windows' and tool == 'aws' else tool
@@ -485,9 +625,9 @@ class CloudXSetup:
                 session = boto3.Session(profile_name=self.profile)
             except Exception:
                 # Profile doesn't exist, create it
-                self.print_status(f"AWS profile '{self.profile}' not found", False, 2)
+                self.print_status(f"AWS profile '{self.profile}' not found", None, 2)
                 self.print_status("Setting up AWS profile...", None, 2)
-                print(info("Please enter your AWS credentials:"))
+                self.print_status(info("Please enter your AWS credentials:"), None, 2)
                 
                 # Use aws configure command
                 subprocess.run([
@@ -581,28 +721,10 @@ class CloudXSetup:
         
         self.print_status("1Password CLI is authenticated", True, 2)
         
-        # Check if 1Password SSH agent socket exists at ~/.1password/agent.sock
-        if not self.op_agent_sock.exists():
-            self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
-
-            if not self._ensure_op_agent_symlink():
-                self.print_status("1Password SSH agent is not available", False, 2)
-                self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
-                self.print_status("1Password integration is not supported in this configuration", False, 2)
-                return False
-        elif platform.system() == 'Darwin' and self.op_agent_sock.is_symlink():
-            try:
-                current_target = self.op_agent_sock.resolve(strict=False)
-            except FileNotFoundError:
-                current_target = None
-
-            if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
-                self.print_status("Updating 1Password agent symlink to default location", None, 2)
-                if not self._ensure_op_agent_symlink():
-                    self.print_status("1Password integration is not supported in this configuration", False, 2)
-                    return False
-        
-        self.print_status("1Password SSH agent socket is available", True, 2)
+        # Check that the 1Password SSH agent is reachable. Where it lives is
+        # platform-specific, so this is not a single path test.
+        if not self._check_op_agent():
+            return False
         
         # If using a vault other than "Private", warn the user
         if self.op_vault and self.op_vault != "Private":
@@ -678,9 +800,9 @@ class CloudXSetup:
                     self.print_status(f"Specified vault '{self.op_vault}' not found", False, 2)
                     
                     # Display available vaults
-                    print(f"\n{info('Available 1Password vaults:')}")
+                    self.print_status(info('Available 1Password vaults:'), None, 2)
                     for i, vault in enumerate(vaults):
-                        print(f"  {i+1}. {vault['name']}")
+                        print(f"    {i + 1}. {vault['name']}")
                     
                     # Let user select vault
                     vault_num = self.prompt("Select vault number to store SSH key", "1")
@@ -696,9 +818,9 @@ class CloudXSetup:
             else:
                 # No vault specified, prompt the user
                 self.print_status("Creating a new SSH key in 1Password", None, 2)
-                print(f"\n{info('Available 1Password vaults:')}")
+                self.print_status(info('Available 1Password vaults:'), None, 2)
                 for i, vault in enumerate(vaults):
-                    print(f"  {i+1}. {vault['name']}")
+                    print(f"    {i + 1}. {vault['name']}")
                 
                 # Let user select vault
                 vault_num = self.prompt("Select vault number to store SSH key", "1")
@@ -895,12 +1017,21 @@ class CloudXSetup:
         """
         if self.op_enabled:
             # When using 1Password:
-            # 1. Set IdentityAgent to the 1Password socket (literal tilde for SSH compatibility)
-            # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search
-            # (IdentitiesOnly is now set globally for all cloudX hosts)
-            return """    IdentityAgent ~/.1password/agent.sock
-    IdentityFile {}
-""".format(self.quote_config_value(f"{self.ssh_key_file}.pub"))
+            # 1. Point IdentityAgent at the 1Password socket, where one has to
+            #    be named at all - see _op_identity_agent()
+            # 2. Set IdentityFile to the PUBLIC key (.pub) to limit key search.
+            #    IdentitiesOnly yes is set globally for all cloudX hosts, and
+            #    ssh offers only identities named by IdentityFile even when the
+            #    agent holds more - so the .pub is what lets the agent's copy of
+            #    the key be used at all.
+            lines = []
+            identity_agent = self._op_identity_agent()
+            if identity_agent:
+                lines.append(f"    IdentityAgent {identity_agent}")
+            lines.append(
+                f"    IdentityFile {self.quote_config_value(f'{self.ssh_key_file}.pub')}"
+            )
+            return "\n".join(lines) + "\n"
         else:
             # Standard SSH key configuration
             # (IdentitiesOnly is now set globally for all cloudX hosts)
@@ -1000,13 +1131,150 @@ class CloudXSetup:
 
         return f'{indent}{keyword}{gap}"{value}"'
 
-    @classmethod
-    def _clean_managed_lines(cls, lines: list) -> list:
+    def _prefix_spellings(self) -> list[str]:
+        """The spellings of the host prefix a managed block should answer to.
+
+        The configured one first, then its lowercase form, then - for this
+        project's own prefix - the counterpart spelling, so a config written
+        as cloudx also answers to cloudX and the other way round.
+        """
+        spellings = [self.ssh_host_prefix]
+        counterpart = 'cloudX' if self.ssh_host_prefix.lower() == 'cloudx' else None
+        for candidate in (self.ssh_host_prefix.lower(), counterpart):
+            if candidate and candidate not in spellings:
+                spellings.append(candidate)
+        return spellings
+
+    @property
+    def preferred_host_prefix(self) -> str:
+        """The spelling to show a pattern in.
+
+        cloudX is the product's own name - the X is ten, after Cloud9 - so it
+        is the spelling to put in front of a user, whichever of the two command
+        names they happened to type. Any other prefix is shown as configured.
+        """
+        if self.ssh_host_prefix.lower() == 'cloudx':
+            return 'cloudX'
+        return self.ssh_host_prefix
+
+    def _host_pattern_variants(self, pattern: str) -> list[str]:
+        """Every spelling of a wildcard Host pattern to write, canonical first.
+
+        ssh matches Host patterns case-SENSITIVELY, and its pattern syntax has
+        only '*' and '?' - there is no [xX] character class, so `cloud[xX]-*`
+        matches a host literally called that and nothing else. A block written
+        as `Host cloudX-*` therefore simply does not apply to a host entry
+        spelled `cloudx-dev-web1`, and both spellings exist in the wild: they
+        have been written by different versions of this tool, by the two
+        command names, and by hand.
+
+        A Host line takes any number of patterns and matches if any one of them
+        does, so wildcard blocks list every spelling rather than betting on one.
+
+        Args:
+            pattern: A Host pattern, e.g. 'cloudX-dev-*'
+
+        Returns:
+            list[str]: The patterns to write, canonical spelling first. Only
+            the prefix varies; everything after it is left exactly as given.
+        """
+        prefix_len = len(self.ssh_host_prefix)
+        if pattern[:prefix_len + 1].lower() != f"{self.ssh_host_prefix.lower()}-":
+            return [pattern]
+
+        rest = pattern[prefix_len:]
+        variants = []
+        for spelling in self._prefix_spellings():
+            candidate = f"{spelling}{rest}"
+            if candidate not in variants:
+                variants.append(candidate)
+        return variants
+
+    def _host_line_value(self, pattern: str) -> str:
+        """The Host line value for a pattern: every spelling, space separated."""
+        return ' '.join(self._host_pattern_variants(pattern))
+
+    def _collapse_host_patterns(self, patterns: list[str]) -> str | None:
+        """Collapse a Host line's patterns to the single pattern they spell.
+
+        Our wildcard blocks carry one pattern per prefix spelling, so their Host
+        lines list more than one. That is still one block - but only while the
+        patterns differ in case alone. A line naming genuinely different hosts
+        is the user's, and stays theirs.
+
+        Args:
+            patterns: The whitespace-separated patterns of a Host line
+
+        Returns:
+            str | None: The first pattern if they are all one pattern, else None
+        """
+        if not patterns:
+            return None
+        if len({pattern.lower() for pattern in patterns}) != 1:
+            return None
+        return patterns[0]
+
+    def _normalize_managed_host_line(self, line: str) -> str:
+        """Write a managed Host line so it matches every spelling of the prefix.
+
+        Blocks are recognised as ours case-insensitively, but ssh matches Host
+        patterns case-SENSITIVELY. Writing a block back in the case it happened
+        to have therefore produces a file whose parts disagree: a stale
+        `Host cloudx-*` sitting above `Host cloudX-dev-web1` never matches it,
+        so `IdentitiesOnly yes` and `User ec2-user` silently stop applying -
+        which lets ssh offer every agent key and hit the server's MaxAuthTries
+        before reaching the one that was just pushed.
+
+        Wildcard blocks are therefore written with one pattern per prefix
+        spelling, which covers the mixed-case files already out there instead
+        of merely refusing to add to them.
+
+        Host entries are left exactly as they are. `cloudX` is the product's
+        name - the X is ten, after Cloud9 - but people who dislike reaching for
+        shift call their instance `cloudx-dev-something`, and that name is
+        theirs: it is what they type, what `list` reports and what VSCode
+        offers. Since the wildcard blocks above now answer to both spellings,
+        the entry does not need renaming to pick up its settings.
+
+        Args:
+            line: A managed block's Host line
+
+        Returns:
+            str: The line with its patterns in canonical form
+        """
+        match = re.match(r'^(\s*)(host)(\s+)(.*)$', line, re.IGNORECASE)
+        if not match:
+            return line
+
+        indent, keyword, gap, value = match.groups()
+
+        # Split off an inline comment, keeping the spacing in front of it.
+        hash_pos = value.find('#')
+        body, tail = (value, '') if hash_pos == -1 else (value[:hash_pos], value[hash_pos:])
+        gap_before_comment = body[len(body.rstrip()):]
+
+        collapsed = self._collapse_host_patterns(body.split())
+        if collapsed is None:
+            return line
+
+        prefix_len = len(self.ssh_host_prefix)
+        if collapsed[:prefix_len + 1].lower() != f"{self.ssh_host_prefix.lower()}-":
+            return line
+
+        if '*' not in collapsed:
+            return line
+
+        canonical = f"{self.ssh_host_prefix}{collapsed[prefix_len:]}"
+        patterns = self._host_pattern_variants(canonical)
+
+        return f"{indent}{keyword}{gap}{' '.join(patterns)}{gap_before_comment}{tail}"
+
+    def _clean_managed_lines(self, lines: list) -> list:
         """Strip comments and blank lines from a block cloudx-proxy manages.
 
-        The header line is kept verbatim so inline comments on Host entries
-        survive; everything below it is normalised, since those sections are
-        regenerated from scratch on every write.
+        The header line keeps its inline comment, but has its prefix put into
+        the case in use; everything below it is normalised, since those
+        sections are regenerated from scratch on every write.
 
         Args:
             lines: Raw lines of the block, header first
@@ -1017,14 +1285,14 @@ class CloudXSetup:
         cleaned = []
         for index, line in enumerate(lines):
             if index == 0:
-                cleaned.append(line.rstrip())
+                cleaned.append(self._normalize_managed_host_line(line.rstrip()))
                 continue
             stripped = line.strip()
             if not stripped or stripped.startswith('#'):
                 continue
             if '#' in line:
                 line = line.split('#')[0].rstrip()
-            line = cls._requote_path_directive(line)
+            line = self._requote_path_directive(line)
             cleaned.append(line.rstrip())
         return cleaned
 
@@ -1168,11 +1436,16 @@ class CloudXSetup:
         # patterns have to be collected before host entries, because they are
         # what makes a hyphenated environment name unambiguous.
         for block in blocks:
-            name = block['value'].split('#')[0].strip()
-
-            # Match blocks, multi-pattern Host lines and anything not carrying
-            # our prefix belong to the user, not to us.
-            if block['keyword'] != 'host' or not name or len(name.split()) > 1:
+            # A wildcard block of ours lists one pattern per prefix spelling,
+            # so collapse those back to the single pattern they spell. Match
+            # blocks, Host lines naming genuinely different hosts, and anything
+            # not carrying our prefix belong to the user, not to us.
+            name = None
+            if block['keyword'] == 'host':
+                name = self._collapse_host_patterns(
+                    block['value'].split('#')[0].split()
+                )
+            if not name:
                 unmanaged.append(block)
                 continue
 
@@ -1228,7 +1501,9 @@ class CloudXSetup:
                 result['environments'][env_name_key] = {
                     'pattern': f"{prefix}-{env_name_original}-*",
                     'name': env_name_original,  # Store original case for display
-                    'lines': [f"Host {prefix}-{env_name_original}-*"]
+                    'lines': [
+                        f"Host {self._host_line_value(f'{prefix}-{env_name_original}-*')}"
+                    ]
                 }
 
             # Add host entry
@@ -1376,9 +1651,12 @@ class CloudXSetup:
         # Determine the "other" prefix to replace
         other_prefix = 'cloudx' if self.ssh_host_prefix == 'cloudX' else 'cloudX'
 
-        # Replace in Host patterns: Host cloudX-* or Host cloudx-*
+        # Replace in wildcard Host patterns only: Host cloudX-* or Host
+        # cloudx-*. A host entry carries no '*', and its name belongs to
+        # whoever created the instance - converting the command name must not
+        # rename it out from under them.
         content = re.sub(
-            rf'\bHost {other_prefix}-',
+            rf'\bHost {other_prefix}-(?=\S*\*)',
             f'Host {self.ssh_host_prefix}-',
             content
         )
@@ -1399,7 +1677,7 @@ class CloudXSetup:
             str: Generic configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-*
+        config = f"""Host {self._host_line_value(f"{self.ssh_host_prefix}-*")}
     User ec2-user
     TCPKeepAlive yes
     IdentitiesOnly yes
@@ -1430,7 +1708,7 @@ class CloudXSetup:
             str: Environment configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-*
+        config = f"""Host {self._host_line_value(f"{self.ssh_host_prefix}-{cloudx_env}-*")}
 """
         # Add authentication configuration
         config += self._build_auth_config()
@@ -1441,19 +1719,22 @@ class CloudXSetup:
 
         return config
         
-    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str) -> str:
+    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str,
+                           host_name: str | None = None) -> str:
         """Build a host-specific configuration block.
 
         Args:
             cloudx_env: CloudX environment
             hostname: Hostname for the instance
             instance_id: EC2 instance ID
+            host_name: Full name to write, when an entry already exists under a
+                name of its own. New entries use the configured prefix.
 
         Returns:
             str: Host configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
+        config = f"""Host {host_name or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"}
     HostName {instance_id}
 """
 
@@ -1500,8 +1781,9 @@ class CloudXSetup:
                 cloudx_env = existing_env.get('name', cloudx_env)
 
             host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-            new_host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
             host_existed = False
+            existing_host_name = None
+            self.last_host_entry_name = host_pattern
 
             # Ensure environment section exists
             if existing_env is None:
@@ -1510,7 +1792,10 @@ class CloudXSetup:
                 parsed['environments'][env_key] = {
                     'pattern': env_pattern,
                     'name': cloudx_env,
-                    'lines': [f"Host {env_pattern}", *self._build_environment_config(cloudx_env).split('\n')[1:]]
+                    'lines': [
+                        f"Host {self._host_line_value(env_pattern)}",
+                        *self._build_environment_config(cloudx_env).split('\n')[1:],
+                    ]
                 }
                 self.print_status(f"Created new environment section for '{cloudx_env}'", None, 2)
             else:
@@ -1525,13 +1810,21 @@ class CloudXSetup:
                         skipping = entry.lower() == host_pattern.lower()
                         if skipping:
                             host_existed = True
+                            existing_host_name = entry
                             continue
                     elif skipping:
                         continue
                     new_lines.append(line)
                 existing_env['lines'] = new_lines
 
-            # Add new host entry
+            # Add new host entry. An entry that is already there keeps the
+            # name it has: cloudX is the product's name, but calling the box
+            # cloudx-dev-web1 is its owner's call and it is what they type -
+            # only the instance id is being updated here.
+            self.last_host_entry_name = existing_host_name or host_pattern
+            new_host_entry = self._build_host_config(
+                cloudx_env, hostname, instance_id, host_name=existing_host_name
+            )
             parsed['environments'][env_key]['lines'].extend(new_host_entry.split('\n'))
 
             # Rebuild config with organization
@@ -1561,6 +1854,47 @@ class CloudXSetup:
             self.print_status(f"{color_error('Error:', bold=True)} {e!s}", False, 2)
             return self.confirm_continue_after_error("SSH config issues")
 
+    # Flags a ProxyCommand can carry, with their values quoted or bare
+    _PROXY_FLAG_RE = re.compile(r'''(--[\w-]+)\s+("[^"]*"|'[^']*'|[^\s-]\S*)''')
+
+    def _rebuild_proxy_command(self, line: str) -> str:
+        """Rebuild a ProxyCommand, keeping every flag it already carried.
+
+        The rebuild exists to drop flags that merely restate an auto-detected
+        default, but it recomputes them from this process's own defaults, which
+        are not the ones the line was written with. Left to itself it deletes
+        settings that are doing real work: an explicit `--profile cloudx` was
+        dropped because the default detected here is `cloudX`, and since AWS
+        profile names are case-sensitive the next connection failed with "The
+        config profile (cloudX) could not be found".
+
+        A flag the rebuild does not reproduce is therefore carried over rather
+        than discarded. Cleanup may tidy the configuration; it may not decide
+        that part of it was unnecessary.
+
+        Args:
+            line: The existing ProxyCommand line
+
+        Returns:
+            str: The rebuilt command, with nothing lost
+        """
+        existing = dict(self._PROXY_FLAG_RE.findall(line))
+
+        # aws-env cannot be derived from anything here, so it is fed back in
+        original_aws_env = self.aws_env
+        aws_env = existing.get('--aws-env')
+        self.aws_env = aws_env.strip('"\'') if aws_env else None
+        try:
+            rebuilt = self._build_proxy_command()
+        finally:
+            self.aws_env = original_aws_env
+
+        for flag, value in existing.items():
+            if flag not in rebuilt:
+                rebuilt += f" {flag} {value}"
+
+        return rebuilt
+
     def cleanup_config(self) -> bool:
         """Clean up and reorganize SSH configuration file.
 
@@ -1572,7 +1906,10 @@ class CloudXSetup:
             bool: True if cleanup was successful
         """
         try:
+            self.print_header("Cleanup")
+
             if not self.ssh_config_file.exists():
+                self.print_status("Reorganizing SSH configuration...")
                 self.print_status(f"SSH config file not found: {self.ssh_config_file}", False, 2)
                 return False
 
@@ -1585,6 +1922,7 @@ class CloudXSetup:
 
             # For dry-run, show what would be cleaned up
             if self.dry_run:
+                self.print_status("[DRY RUN] Would reorganize the SSH configuration")
                 self.print_status("Parsing SSH config...", None, 2)
                 parsed = self._parse_ssh_config(current_config)
 
@@ -1594,15 +1932,24 @@ class CloudXSetup:
                     for env_data in parsed['environments'].values()
                 )
 
-                self.print_status(f"[DRY RUN] Would reorganize {len(parsed['environments'])} environments", None, 2)
-                self.print_status(f"[DRY RUN] Would reorganize {total_hosts} host entries", None, 2)
+                self.print_status(
+                    f"[DRY RUN] Would reorganize {plural(len(parsed['environments']), 'environment')}",
+                    None, 2
+                )
+                self.print_status(
+                    f"[DRY RUN] Would reorganize {plural(total_hosts, 'host entry', 'host entries')}",
+                    None, 2
+                )
                 if parsed['other']:
                     self.print_status(
-                        f"[DRY RUN] Would preserve {len(parsed['other'])} unmanaged entries as-is", None, 2
+                        "[DRY RUN] Would preserve "
+                        f"{plural(len(parsed['other']), 'unmanaged entry', 'unmanaged entries')}"
+                        " as-is", None, 2
                     )
                 return True
 
             # Parse existing config
+            self.print_status("Reorganizing SSH configuration...")
             self.print_status("Parsing SSH config...", None, 2)
             parsed = self._parse_ssh_config(current_config)
 
@@ -1615,30 +1962,14 @@ class CloudXSetup:
                 new_lines = []
                 for line in env_lines:
                     if line.strip().startswith('ProxyCommand'):
-                        # Extract aws-env from the existing ProxyCommand if
-                        # present, quoted or not
-                        aws_env = None
-                        if '--aws-env' in line:
-                            match = re.search(
-                                r'''--aws-env\s+("[^"]*"|'[^']*'|\S+)''', line
-                            )
-                            if match:
-                                aws_env = match.group(1).strip('"\'')
-
-                        # Temporarily set aws_env for ProxyCommand building
-                        original_aws_env = self.aws_env
-                        self.aws_env = aws_env
-                        optimized_command = self._build_proxy_command()
-                        self.aws_env = original_aws_env
-
-                        new_lines.append(f"    ProxyCommand {optimized_command}")
+                        new_lines.append(f"    ProxyCommand {self._rebuild_proxy_command(line)}")
                     else:
                         new_lines.append(line)
 
                 parsed['environments'][env_name]['lines'] = new_lines
 
             # Reorganize with proper structure
-            self.print_status("Reorganizing configuration...", None, 2)
+            self.print_status("Rebuilding the file...", None, 2)
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
                 parsed['environments'],
@@ -1663,7 +1994,9 @@ class CloudXSetup:
 
             if parsed['other']:
                 self.print_status(
-                    f"Preserved {len(parsed['other'])} unmanaged entries as-is", True, 2
+                    "Preserved "
+                    f"{plural(len(parsed['other']), 'unmanaged entry', 'unmanaged entries')}"
+                    " as-is", True, 2
                 )
             self.print_status("Cleanup completed and config reorganized", True, 2)
             return True
@@ -1926,7 +2259,13 @@ class CloudXSetup:
             self.print_status(f"System config: {format_path(str(system_config_path))}", None, 2)
             self.print_status(f"cloudX-proxy config: {format_path(str(self.ssh_config_file))}", None, 2)
             self.print_status(f"SSH key directory: {format_path(str(self.ssh_dir))}", None, 2)
-            self.print_status(f"Connect using: {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}", None, 2)
+            # Name the entry that was actually written: an existing host keeps
+            # the name it has, which is not necessarily the configured case.
+            connect_name = (
+                self.last_host_entry_name
+                or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
+            )
+            self.print_status(f"Connect using: {format_command(f'ssh {connect_name}')}", None, 2)
             
             return True
 
@@ -1946,7 +2285,7 @@ class CloudXSetup:
             bool: True if instance is accessible
         """
         ssh_host = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-        self.print_status(f"Checking SSH connection to {ssh_host}...", None, 4)
+        self.print_status(f"Checking SSH connection to {ssh_host}...", None, 2)
         
         try:
             # Try to connect with a simple command that will exit immediately.
@@ -1968,24 +2307,24 @@ class CloudXSetup:
             )
 
             if result.returncode == 0:
-                self.print_status("SSH connection successful", True, 4)
+                self.print_status("SSH connection successful", True, 2)
                 return True
             else:
-                self.print_status("SSH connection failed", False, 4)
+                self.print_status("SSH connection failed", False, 2)
                 if "Connection refused" in result.stderr:
-                    self.print_status("Instance appears to be starting up. Please try again in a few minutes.", None, 4)
+                    self.print_status("Instance appears to be starting up. Please try again in a few minutes.", None, 2)
                 elif "Connection timed out" in result.stderr:
-                    self.print_status("Instance may be stopped. Please start it through the appropriate channels.", None, 4)
+                    self.print_status("Instance may be stopped. Please start it through the appropriate channels.", None, 2)
                 else:
-                    self.print_status(f"Error: {result.stderr.strip()}", None, 4)
+                    self.print_status(f"Error: {result.stderr.strip()}", None, 2)
                 return False
                 
         except subprocess.TimeoutExpired:
-            self.print_status("SSH connection timed out", False, 4)
-            self.print_status("Instance may be stopped or still starting up", None, 4)
+            self.print_status("SSH connection timed out", False, 2)
+            self.print_status("Instance may be stopped or still starting up", None, 2)
             return False
         except Exception as e:
-            self.print_status(f"Error checking SSH connection: {e!s}", False, 4)
+            self.print_status(f"Error checking SSH connection: {e!s}", False, 2)
             return False
 
     def wait_for_setup_completion(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
@@ -2007,13 +2346,19 @@ class CloudXSetup:
             self.print_status("[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
             return True
         
+        self.print_status("Checking instance accessibility...")
+
         # On Windows, skip the automated connection test as it may hang
         # Instead, provide clear instructions for manual testing
         if platform.system() == 'Windows':
             self.print_status("Skipping automated connection test on Windows", None, 2)
             print(f"\n{info('='*60)}")
             print(info("Setup completed! To test your SSH connection, run:"))
-            print(f"\n  {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}")
+            connect_name = (
+                self.last_host_entry_name
+                or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
+            )
+            print(f"\n  {format_command(f'ssh {connect_name}')}")
             print(f"\n{info('='*60)}\n")
             self.print_status("Configuration files have been created successfully", True, 2)
             return True
@@ -2066,13 +2411,15 @@ class CloudXSetup:
             # Show what would be replaced
             old_dir_name = vscode_dir.name
             new_dir_name = target_dir.name
-            self.print_status(f"  - Replace /{old_dir_name}/ with /{new_dir_name}/", None, 3)
-            self.print_status(f"  - Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 3)
-            self.print_status(f"  - Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 3)
+            self.print_status(f"Replace /{old_dir_name}/ with /{new_dir_name}/", None, 4)
+            self.print_status(f"Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 4)
+            self.print_status(f"Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 4)
 
             self.print_status("[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
             return True
             
+        self.print_status(f"Migrating to {target_dir}...")
+
         if not vscode_dir.exists():
             self.print_status(f"Source directory {vscode_dir} does not exist", False, 2)
             return False
@@ -2170,6 +2517,7 @@ class CloudXSetup:
             return False
             
         self.print_header("Migration Available")
+        self.print_status("Checking for a legacy ~/.ssh/vscode configuration...")
         self.print_status("Found existing configuration in ~/.ssh/vscode", None, 2)
         self.print_status("The default directory is now ~/.ssh/cloudX", None, 2)
         

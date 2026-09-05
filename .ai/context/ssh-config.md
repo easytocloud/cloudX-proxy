@@ -66,7 +66,14 @@ Host cloudX-Prod-*
 
 **Settings explained**:
 - `IdentityFile`: Path to the SSH private key for this environment
-- `IdentitiesOnly yes`: Only use the specified key, don't try others from ssh-agent
+- `IdentitiesOnly yes`: Only use the specified key, don't try others from ssh-agent.
+  With 1Password this is why `IdentityFile` names the *public* key: ssh offers only
+  identities named by `IdentityFile`, even when the agent holds more, so the `.pub`
+  is what lets the agent's copy of the key be used at all.
+- `IdentityAgent`: Only written with `--1password`, and only where the agent has to be
+  named: `~/.1password/agent.sock` on macOS and Linux (or the snap path on snap
+  installs). Nothing is written on Windows, where 1Password serves the standard
+  OpenSSH named pipe `\\.\pipe\openssh-ssh-agent` that ssh already uses by default.
 - `ProxyCommand`: The cloudX-proxy connect command that:
   - Checks if the instance is running (starts it if needed)
   - Pushes the SSH public key to the instance
@@ -101,13 +108,37 @@ Host cloudX-Prod-foobar
 - The `Environment` tag determines the environment part
 - The `Name` tag (or user-specified hostname) determines the hostname part
 
+## Prefix Case
+
+ssh matches `Host` **patterns** case-sensitively, and the pattern syntax supports
+only `*` and `?` - `cloud[xX]-*` is a literal hostname, not a character class. A
+block written as `Host cloudX-*` therefore does not apply to a host entry spelled
+`cloudx-dev-web1`, and both spellings exist in the wild (two command names, older
+releases, hand edits).
+
+Wildcard blocks are consequently written with one pattern per prefix spelling -
+`Host cloudX-* cloudx-*` - since a `Host` line takes any number of patterns and
+matches if any one of them does. The configured spelling always comes first.
+
+Only the prefix varies between the patterns. The environment part is set by
+whoever rolled out the environment stack and the host part is chosen by the user;
+both are written exactly as given.
+
+Host entries are never rewritten. `cloudX` is the product's name - the X is ten,
+after Cloud9 - but people who would rather not reach for shift call their instance
+`cloudx-dev-something`, and that name is theirs: it is what they type, what `list`
+reports and what VSCode offers. The widened wildcard blocks match it either way, so
+it does not need renaming to inherit its settings. Re-running `setup` for an
+existing host updates its `HostName` and keeps its name; only a brand new entry is
+written in the configured case.
+
 ## Configuration Inheritance
 
 SSH applies configurations from most specific to least specific. When connecting to `cloudX-Prod-foobar`:
 
 1. **Host cloudX-Prod-foobar** matches first → sets `HostName`
-2. **Host cloudX-Prod-*** matches next → sets `IdentityFile`, `IdentitiesOnly`, `ProxyCommand`
-3. **Host cloudX-*** matches last → sets `User`, `TCPKeepAlive`, `Control*`
+2. **Host cloudX-Prod-* cloudx-Prod-*** matches next → sets `IdentityFile`, `IdentitiesOnly`, `ProxyCommand`
+3. **Host cloudX-* cloudx-*** matches last → sets `User`, `TCPKeepAlive`, `Control*`
 
 The result is a fully configured connection with all necessary settings.
 

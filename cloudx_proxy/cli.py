@@ -31,6 +31,20 @@ def detect_ssh_defaults() -> tuple:
         return "cloudX", "cloudX", "~/.ssh/cloudX"
 
 
+def prefix_from_command_name() -> str:
+    """The host prefix implied by the command name that was invoked.
+
+    On Windows a console script is an .exe, so sys.argv[0] ends in one and a
+    bare basename never equals 'cloudX-proxy' - every Windows user silently
+    got the lowercase prefix whichever command they typed. Compare the stem.
+
+    Returns:
+        str: 'cloudX' when invoked as cloudX-proxy, otherwise 'cloudx'
+    """
+    stem = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+    return 'cloudX' if stem == 'cloudX-proxy' else 'cloudx'
+
+
 def short_host_name(host: str, host_prefix: str) -> str:
     """Strip '<prefix>-<env>-' off a host entry to get its short name.
 
@@ -188,8 +202,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
     try:
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
-            cmd_name = os.path.basename(sys.argv[0])
-            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+            ssh_host_prefix = prefix_from_command_name()
 
         setup = CloudXSetup(
             profile=profile,
@@ -205,9 +218,9 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         )
         
         if dry_run:
-            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===')}\n")
+            print(f"\n{header('=== cloudX-proxy Setup (DRY RUN) ===')}")
         else:
-            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup ===')}\n")
+            print(f"\n{header('=== cloudX-proxy Setup ===')}")
         
         # Report missing tooling up front rather than from inside a
         # ProxyCommand, where the error is easy to miss
@@ -340,7 +353,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 config_file = cloudx_config
         
         if dry_run:
-            print(f"\n{header('=== cloudx-proxy List (DRY RUN) ===')}\n")
+            print(f"\n{header('=== cloudX-proxy List (DRY RUN) ===')}\n")
             print(f"[DRY RUN] Would read SSH config from: {config_file}")
             if environment:
                 print(f"[DRY RUN] Would filter hosts by environment: {environment}")
@@ -355,8 +368,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             sys.exit(1)
 
         # Detect ssh_host_prefix from command name
-        cmd_name = os.path.basename(sys.argv[0])
-        ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+        ssh_host_prefix = prefix_from_command_name()
 
         # Use shared parser from CloudXSetup
         setup = CloudXSetup(ssh_config=str(config_file), ssh_host_prefix=ssh_host_prefix)
@@ -367,17 +379,25 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         environments = {}
         generic_hosts = []
 
+        # Patterns are shown in the preferred spelling whichever command name
+        # was typed. A configured host keeps whatever case its owner gave it
+        # and is listed under that name; a pattern has no owner, so there is
+        # no reason to show 'cloudx-dev-*' to someone who ran cloudX-proxy.
+        display_prefix = setup.preferred_host_prefix
+
         # Add global pattern if present
         if parsed['global']:
-            generic_hosts.append((f"{ssh_host_prefix}-*", "N/A"))
+            generic_hosts.append((f"{display_prefix}-*", "N/A"))
 
         # Process each environment
         for env_key, env_data in parsed['environments'].items():
             # Use original case name for display, fallback to key if not present
             display_name = env_data.get('name', env_key)
 
-            # Add environment pattern to generic hosts
-            generic_hosts.append((env_data['pattern'], "N/A"))
+            # Add environment pattern to generic hosts. Environments with no
+            # hosts of their own appear here and nowhere else, since the
+            # listing below is built from host entries.
+            generic_hosts.append((f"{display_prefix}-{display_name}-*", "N/A"))
 
             # Filter by environment if specified
             if environment and env_key.lower() != environment.lower():
@@ -426,7 +446,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             return
             
         # Print header
-        print(f"\n{header('=== cloudx-proxy Configured Hosts ===')}\n")
+        print(f"\n{header('=== cloudX-proxy Configured Hosts ===')}\n")
 
         # Print generic patterns if any and detailed mode
         if generic_hosts and detailed:
@@ -514,8 +534,7 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
 
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
-            cmd_name = os.path.basename(sys.argv[0])
-            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+            ssh_host_prefix = prefix_from_command_name()
 
         setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
