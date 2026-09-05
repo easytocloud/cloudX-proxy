@@ -272,6 +272,9 @@ class CloudXSetup:
         
         self.ssh_key_file = self.ssh_dir / f"{ssh_key}"
         self.default_env = None
+        # Name of the host entry last written, which is not necessarily the
+        # configured case: an entry already in the config keeps its own name.
+        self.last_host_entry_name = None
 
     # On Windows the 1Password SSH agent serves the standard OpenSSH named
     # pipe, which ssh talks to by default. There is no socket file to find
@@ -422,10 +425,14 @@ class CloudXSetup:
     def print_header(self, text: str) -> None:
         """Print a section header.
 
+        One blank line separates it from what came before. The caller printing
+        the banner above the first section does not add one of its own, or the
+        two stack into a gap.
+
         Args:
             text: The header text
         """
-        print(f"\n\n{header(f'=== {text} ===')}")
+        print(f"\n{header(f'=== {text} ===')}")
 
     def print_status(self, message: str, status: bool | None = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
@@ -1738,6 +1745,7 @@ class CloudXSetup:
             host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
             host_existed = False
             existing_host_name = None
+            self.last_host_entry_name = host_pattern
 
             # Ensure environment section exists
             if existing_env is None:
@@ -1775,6 +1783,7 @@ class CloudXSetup:
             # name it has: cloudX is the product's name, but calling the box
             # cloudx-dev-web1 is its owner's call and it is what they type -
             # only the instance id is being updated here.
+            self.last_host_entry_name = existing_host_name or host_pattern
             new_host_entry = self._build_host_config(
                 cloudx_env, hostname, instance_id, host_name=existing_host_name
             )
@@ -2197,7 +2206,13 @@ class CloudXSetup:
             self.print_status(f"System config: {format_path(str(system_config_path))}", None, 2)
             self.print_status(f"cloudX-proxy config: {format_path(str(self.ssh_config_file))}", None, 2)
             self.print_status(f"SSH key directory: {format_path(str(self.ssh_dir))}", None, 2)
-            self.print_status(f"Connect using: {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}", None, 2)
+            # Name the entry that was actually written: an existing host keeps
+            # the name it has, which is not necessarily the configured case.
+            connect_name = (
+                self.last_host_entry_name
+                or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
+            )
+            self.print_status(f"Connect using: {format_command(f'ssh {connect_name}')}", None, 2)
             
             return True
 

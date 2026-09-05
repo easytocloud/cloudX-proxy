@@ -819,6 +819,15 @@ Host cloudx-dev-web1
         assert "HostName i-9999999999999999" in result
         assert "HostName i-0123456789abcdef0" not in result
 
+    def test_the_connect_hint_names_the_entry_that_was_written(self, tmp_path, capsys):
+        """Telling someone to `ssh cloudX-dev-web1` when the entry says
+        cloudx-dev-web1 sends them to a host that does not resolve."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web1")
+
+        assert "ssh cloudx-dev-web1" in capsys.readouterr().out
+
     def test_a_brand_new_host_uses_the_configured_case(self, tmp_path):
         setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
 

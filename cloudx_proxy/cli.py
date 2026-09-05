@@ -205,9 +205,9 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
         )
         
         if dry_run:
-            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup (DRY RUN) ===')}\n")
+            print(f"\n{header('=== cloudX-proxy Setup (DRY RUN) ===')}")
         else:
-            print(f"\n{header(f'=== {ssh_host_prefix}-proxy Setup ===')}\n")
+            print(f"\n{header('=== cloudX-proxy Setup ===')}")
         
         # Report missing tooling up front rather than from inside a
         # ProxyCommand, where the error is easy to miss
@@ -340,7 +340,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
                 config_file = cloudx_config
         
         if dry_run:
-            print(f"\n{header('=== cloudx-proxy List (DRY RUN) ===')}\n")
+            print(f"\n{header('=== cloudX-proxy List (DRY RUN) ===')}\n")
             print(f"[DRY RUN] Would read SSH config from: {config_file}")
             if environment:
                 print(f"[DRY RUN] Would filter hosts by environment: {environment}")
@@ -434,7 +434,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             return
             
         # Print header
-        print(f"\n{header('=== cloudx-proxy Configured Hosts ===')}\n")
+        print(f"\n{header('=== cloudX-proxy Configured Hosts ===')}\n")
 
         # Print generic patterns if any and detailed mode
         if generic_hosts and detailed:

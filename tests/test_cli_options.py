@@ -132,3 +132,38 @@ Host cloudx-empty-* cloudX-empty-*
         assert "Environment: empty" not in result.output
         # It is still visible as a pattern, in the preferred spelling.
         assert "cloudX-empty-*" in result.output
+
+
+class TestOutputSpacing:
+    """`print_header` prepended two newlines while the banner above it appended
+    one, so the first section sat under three blank lines and every section
+    after it under two."""
+
+    def test_sections_are_separated_by_one_blank_line(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", ["cloudX-proxy"])
+
+        result = CliRunner().invoke(cli, [
+            "setup", "--dry-run", "--yes",
+            "--instance", "i-0123456789abcdef0",
+            "--hostname", "web1", "--environment", "dev",
+            "--ssh-config", str(tmp_path / "cloudX" / "config"),
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert "\n\n\n" not in result.output, "blank lines are stacking up"
+        assert "=== Prerequisites ===" in result.output
+
+    @pytest.mark.parametrize("argv0", ["cloudX-proxy", "cloudx-proxy"])
+    def test_banners_use_the_product_spelling(self, tmp_path, monkeypatch, argv0):
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", [argv0])
+
+        result = CliRunner().invoke(cli, [
+            "setup", "--dry-run", "--yes",
+            "--instance", "i-0123456789abcdef0",
+            "--hostname", "web1", "--environment", "dev",
+            "--ssh-config", str(tmp_path / "cloudX" / "config"),
+        ])
+
+        assert "=== cloudX-proxy Setup (DRY RUN) ===" in result.output
