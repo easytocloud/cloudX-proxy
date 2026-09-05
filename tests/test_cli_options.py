@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from cloudx_proxy.cli import cli
-from cloudx_proxy.setup import CloudXSetup
+from cloudx_proxy.setup import CloudXSetup, plural
 
 
 def run_setup(tmp_path, monkeypatch, extra_args):
@@ -273,3 +273,79 @@ class TestOneFailureOneCross:
 
         marks = [symbol for _i, symbol, _t in status_lines(capsys.readouterr().out)]
         assert marks.count("✗") == 1, f"one failure, one cross: {marks}"
+
+
+class TestCountsAgreeWithTheirNoun:
+    """`Would reorganize 1 environments` reads like a bug in the tool."""
+
+    def cleanup_output(self, tmp_path, monkeypatch, config, args=()):
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", ["cloudX-proxy"])
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True, exist_ok=True)
+        (ssh_dir / "config").write_text(config)
+
+        result = CliRunner().invoke(
+            cli, ["cleanup", "--ssh-config", str(ssh_dir / "config"), *args]
+        )
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    ONE = """Host cloudX-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+
+Host mybox
+    HostName 10.0.0.1
+"""
+
+    TWO = ONE + """
+Host cloudX-prd-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+
+Host cloudX-prd-web1
+    HostName i-0aaaaaaaaaaaaaaaa
+
+Host cloudX-prd-web2
+    HostName i-0bbbbbbbbbbbbbbbb
+
+Host otherbox
+    HostName 10.0.0.2
+"""
+
+    def test_one_of_each(self, tmp_path, monkeypatch):
+        output = self.cleanup_output(tmp_path, monkeypatch, self.ONE, ["--dry-run"])
+
+        assert "1 environment\n" in output or "1 environment " in output
+        assert "1 environments" not in output
+        assert "1 host entry" in output
+        assert "1 unmanaged entry as-is" in output
+
+    def test_more_than_one_of_each(self, tmp_path, monkeypatch):
+        output = self.cleanup_output(tmp_path, monkeypatch, self.TWO, ["--dry-run"])
+
+        assert "2 environments" in output
+        assert "3 host entries" in output
+        assert "2 unmanaged entries as-is" in output
+
+    def test_the_real_run_agrees_too(self, tmp_path, monkeypatch):
+        assert "1 unmanaged entry as-is" in self.cleanup_output(
+            tmp_path, monkeypatch, self.ONE
+        )
+        assert "2 unmanaged entries as-is" in self.cleanup_output(
+            tmp_path, monkeypatch, self.TWO
+        )
+
+
+class TestPluralHelper:
+    def test_one(self):
+        assert plural(1, "environment") == "1 environment"
+
+    def test_zero_and_many(self):
+        assert plural(0, "environment") == "0 environments"
+        assert plural(7, "environment") == "7 environments"
+
+    def test_irregular(self):
+        assert plural(1, "host entry", "host entries") == "1 host entry"
+        assert plural(2, "host entry", "host entries") == "2 host entries"

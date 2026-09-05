@@ -25,6 +25,22 @@ from .colors import format_command, format_path, header, info, status_symbol, wa
 from .colors import prompt as color_prompt
 
 
+def plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """Render a count with its noun: '1 environment', '2 environments'.
+
+    Args:
+        count: How many
+        singular: The noun as written for one
+        plural_form: The noun for any other count, when adding 's' is wrong
+
+    Returns:
+        str: The count and the noun that agrees with it
+    """
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {plural_form or singular + 's'}"
+
+
 class CloudXSetup:
     # Define SSH key prefix as a constant
     SSH_KEY_PREFIX = "cloudX SSH Key - "
@@ -1916,11 +1932,19 @@ class CloudXSetup:
                     for env_data in parsed['environments'].values()
                 )
 
-                self.print_status(f"[DRY RUN] Would reorganize {len(parsed['environments'])} environments", None, 2)
-                self.print_status(f"[DRY RUN] Would reorganize {total_hosts} host entries", None, 2)
+                self.print_status(
+                    f"[DRY RUN] Would reorganize {plural(len(parsed['environments']), 'environment')}",
+                    None, 2
+                )
+                self.print_status(
+                    f"[DRY RUN] Would reorganize {plural(total_hosts, 'host entry', 'host entries')}",
+                    None, 2
+                )
                 if parsed['other']:
                     self.print_status(
-                        f"[DRY RUN] Would preserve {len(parsed['other'])} unmanaged entries as-is", None, 2
+                        "[DRY RUN] Would preserve "
+                        f"{plural(len(parsed['other']), 'unmanaged entry', 'unmanaged entries')}"
+                        " as-is", None, 2
                     )
                 return True
 
@@ -1970,7 +1994,9 @@ class CloudXSetup:
 
             if parsed['other']:
                 self.print_status(
-                    f"Preserved {len(parsed['other'])} unmanaged entries as-is", True, 2
+                    "Preserved "
+                    f"{plural(len(parsed['other']), 'unmanaged entry', 'unmanaged entries')}"
+                    " as-is", True, 2
                 )
             self.print_status("Cleanup completed and config reorganized", True, 2)
             return True
