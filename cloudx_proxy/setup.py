@@ -1100,6 +1100,18 @@ class CloudXSetup:
                 spellings.append(candidate)
         return spellings
 
+    @property
+    def preferred_host_prefix(self) -> str:
+        """The spelling to show a pattern in.
+
+        cloudX is the product's own name - the X is ten, after Cloud9 - so it
+        is the spelling to put in front of a user, whichever of the two command
+        names they happened to type. Any other prefix is shown as configured.
+        """
+        if self.ssh_host_prefix.lower() == 'cloudx':
+            return 'cloudX'
+        return self.ssh_host_prefix
+
     def _host_pattern_variants(self, pattern: str) -> list[str]:
         """Every spelling of a wildcard Host pattern to write, canonical first.
 

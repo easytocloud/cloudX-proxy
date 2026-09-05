@@ -442,6 +442,11 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 > exactly as given. An instance called `cloudx-dev-web1` keeps that name and still
 > picks up its settings from `Host cloudX-dev-* cloudx-dev-*`.
 >
+> `list` reflects that split: hosts appear under the names their owners gave them,
+> while patterns are shown as `cloudX-*` whichever command name you type, since
+> `cloudX` is the preferred spelling. An environment with no hosts of its own is
+> listed only as a pattern (under `--detailed`), not as an environment.
+>
 > Run `cleanup` with your preferred command to normalize existing configurations.
 
 #### Setup Command

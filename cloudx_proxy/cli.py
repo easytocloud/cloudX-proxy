@@ -367,17 +367,25 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
         environments = {}
         generic_hosts = []
 
+        # Patterns are shown in the preferred spelling whichever command name
+        # was typed. A configured host keeps whatever case its owner gave it
+        # and is listed under that name; a pattern has no owner, so there is
+        # no reason to show 'cloudx-dev-*' to someone who ran cloudX-proxy.
+        display_prefix = setup.preferred_host_prefix
+
         # Add global pattern if present
         if parsed['global']:
-            generic_hosts.append((f"{ssh_host_prefix}-*", "N/A"))
+            generic_hosts.append((f"{display_prefix}-*", "N/A"))
 
         # Process each environment
         for env_key, env_data in parsed['environments'].items():
             # Use original case name for display, fallback to key if not present
             display_name = env_data.get('name', env_key)
 
-            # Add environment pattern to generic hosts
-            generic_hosts.append((env_data['pattern'], "N/A"))
+            # Add environment pattern to generic hosts. Environments with no
+            # hosts of their own appear here and nowhere else, since the
+            # listing below is built from host entries.
+            generic_hosts.append((f"{display_prefix}-{display_name}-*", "N/A"))
 
             # Filter by environment if specified
             if environment and env_key.lower() != environment.lower():
