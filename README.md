@@ -252,7 +252,7 @@ Will create a three-tier configuration structure like this:
 # Generic configuration (shared by all environments)
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: generic
-Host cloudX-*
+Host cloudX-* cloudx-*
     User ec2-user
     TCPKeepAlive yes
     ControlMaster auto
@@ -262,7 +262,7 @@ Host cloudX-*
 # Environment configuration (specific to a single environment)
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: environment
-Host cloudX-dev-*
+Host cloudX-dev-* cloudx-dev-*
     IdentityFile ~/.ssh/cloudX/mykey
     IdentitiesOnly yes
     ProxyCommand uvx cloudX-proxy connect %h %p --profile myprofile --ssh-key mykey --ssh-dir ~/.ssh/cloudX
@@ -429,8 +429,13 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 ### Command Line Options
 
 > **Note:** Both `cloudX-proxy` (preferred) and `cloudx-proxy` command names are available. The command name determines the prefix case used in SSH configurations:
-> - `cloudX-proxy` generates `Host cloudX-*` patterns (preferred)
-> - `cloudx-proxy` generates `Host cloudx-*` patterns
+> - `cloudX-proxy` generates `Host cloudX-* cloudx-*` patterns (preferred)
+> - `cloudx-proxy` generates `Host cloudx-* cloudX-*` patterns
+>
+> ssh matches `Host` patterns case-sensitively, and its pattern syntax has only
+> `*` and `?` - there is no `[xX]` character class. Wildcard blocks therefore list
+> both spellings, so a config that mixes them keeps working; the first pattern is
+> the one the command name chose. Host entries name one host and keep one name.
 >
 > Run `cleanup` with your preferred command to normalize existing configurations.
 
@@ -568,8 +573,12 @@ uvx cloudX-proxy cleanup --ssh-config ~/.ssh/custom/config
 ```
 
 **Prefix Normalization:** The cleanup command normalizes all host patterns and ProxyCommand references to match the command name used:
-- Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
-- Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
+- Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-* cloudx-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
+- Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-* cloudX-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
+
+Wildcard blocks keep both spellings so that host entries left behind in the other
+case still pick up `User`, `IdentitiesOnly` and the `ProxyCommand`; host entries
+themselves are renamed to the chosen case.
 
 This allows users to easily convert between naming conventions. The preferred convention is `cloudX` (uppercase X).
 

@@ -1086,8 +1086,79 @@ class CloudXSetup:
 
         return f'{indent}{keyword}{gap}"{value}"'
 
+    def _prefix_spellings(self) -> list[str]:
+        """The spellings of the host prefix a managed block should answer to.
+
+        The configured one first, then its lowercase form, then - for this
+        project's own prefix - the counterpart spelling, so a config written
+        as cloudx also answers to cloudX and the other way round.
+        """
+        spellings = [self.ssh_host_prefix]
+        counterpart = 'cloudX' if self.ssh_host_prefix.lower() == 'cloudx' else None
+        for candidate in (self.ssh_host_prefix.lower(), counterpart):
+            if candidate and candidate not in spellings:
+                spellings.append(candidate)
+        return spellings
+
+    def _host_pattern_variants(self, pattern: str) -> list[str]:
+        """Every spelling of a wildcard Host pattern to write, canonical first.
+
+        ssh matches Host patterns case-SENSITIVELY, and its pattern syntax has
+        only '*' and '?' - there is no [xX] character class, so `cloud[xX]-*`
+        matches a host literally called that and nothing else. A block written
+        as `Host cloudX-*` therefore simply does not apply to a host entry
+        spelled `cloudx-dev-web1`, and both spellings exist in the wild: they
+        have been written by different versions of this tool, by the two
+        command names, and by hand.
+
+        A Host line takes any number of patterns and matches if any one of them
+        does, so wildcard blocks list every spelling rather than betting on one.
+
+        Args:
+            pattern: A Host pattern, e.g. 'cloudX-dev-*'
+
+        Returns:
+            list[str]: The patterns to write, canonical spelling first. Only
+            the prefix varies; everything after it is left exactly as given.
+        """
+        prefix_len = len(self.ssh_host_prefix)
+        if pattern[:prefix_len + 1].lower() != f"{self.ssh_host_prefix.lower()}-":
+            return [pattern]
+
+        rest = pattern[prefix_len:]
+        variants = []
+        for spelling in self._prefix_spellings():
+            candidate = f"{spelling}{rest}"
+            if candidate not in variants:
+                variants.append(candidate)
+        return variants
+
+    def _host_line_value(self, pattern: str) -> str:
+        """The Host line value for a pattern: every spelling, space separated."""
+        return ' '.join(self._host_pattern_variants(pattern))
+
+    def _collapse_host_patterns(self, patterns: list[str]) -> str | None:
+        """Collapse a Host line's patterns to the single pattern they spell.
+
+        Our wildcard blocks carry one pattern per prefix spelling, so their Host
+        lines list more than one. That is still one block - but only while the
+        patterns differ in case alone. A line naming genuinely different hosts
+        is the user's, and stays theirs.
+
+        Args:
+            patterns: The whitespace-separated patterns of a Host line
+
+        Returns:
+            str | None: The first pattern if they are all one pattern, else None
+        """
+        if not patterns:
+            return None
+        if len({pattern.lower() for pattern in patterns}) != 1:
+            return None
+        return patterns[0]
+
     def _normalize_managed_host_line(self, line: str) -> str:
-        """Write a managed Host line with the prefix case currently in use.
+        """Write a managed Host line so it matches every spelling of the prefix.
 
         Blocks are recognised as ours case-insensitively, but ssh matches Host
         patterns case-SENSITIVELY. Writing a block back in the case it happened
@@ -1097,25 +1168,42 @@ class CloudXSetup:
         which lets ssh offer every agent key and hit the server's MaxAuthTries
         before reaching the one that was just pushed.
 
+        Wildcard blocks are therefore written with one pattern per prefix
+        spelling, which covers the mixed-case files already out there instead
+        of merely refusing to add to them. Host entries name one host and keep
+        one name, in the configured case: they are what `list` reports and what
+        VSCode offers, and a second spelling of the prefix would not help
+        anyone typing a different case further along the name anyway.
+
         Args:
             line: A managed block's Host line
 
         Returns:
-            str: The line with its prefix in the canonical case
+            str: The line with its patterns in canonical form
         """
         match = re.match(r'^(\s*)(host)(\s+)(.*)$', line, re.IGNORECASE)
         if not match:
             return line
 
         indent, keyword, gap, value = match.groups()
-        normalized = re.sub(
-            rf'^{re.escape(self.ssh_host_prefix)}-',
-            f'{self.ssh_host_prefix}-',
-            value,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-        return f'{indent}{keyword}{gap}{normalized}'
+
+        # Split off an inline comment, keeping the spacing in front of it.
+        hash_pos = value.find('#')
+        body, tail = (value, '') if hash_pos == -1 else (value[:hash_pos], value[hash_pos:])
+        gap_before_comment = body[len(body.rstrip()):]
+
+        collapsed = self._collapse_host_patterns(body.split())
+        if collapsed is None:
+            return line
+
+        prefix_len = len(self.ssh_host_prefix)
+        if collapsed[:prefix_len + 1].lower() != f"{self.ssh_host_prefix.lower()}-":
+            return line
+
+        canonical = f"{self.ssh_host_prefix}{collapsed[prefix_len:]}"
+        patterns = self._host_pattern_variants(canonical) if '*' in canonical else [canonical]
+
+        return f"{indent}{keyword}{gap}{' '.join(patterns)}{gap_before_comment}{tail}"
 
     def _clean_managed_lines(self, lines: list) -> list:
         """Strip comments and blank lines from a block cloudx-proxy manages.
@@ -1284,11 +1372,16 @@ class CloudXSetup:
         # patterns have to be collected before host entries, because they are
         # what makes a hyphenated environment name unambiguous.
         for block in blocks:
-            name = block['value'].split('#')[0].strip()
-
-            # Match blocks, multi-pattern Host lines and anything not carrying
-            # our prefix belong to the user, not to us.
-            if block['keyword'] != 'host' or not name or len(name.split()) > 1:
+            # A wildcard block of ours lists one pattern per prefix spelling,
+            # so collapse those back to the single pattern they spell. Match
+            # blocks, Host lines naming genuinely different hosts, and anything
+            # not carrying our prefix belong to the user, not to us.
+            name = None
+            if block['keyword'] == 'host':
+                name = self._collapse_host_patterns(
+                    block['value'].split('#')[0].split()
+                )
+            if not name:
                 unmanaged.append(block)
                 continue
 
@@ -1344,7 +1437,9 @@ class CloudXSetup:
                 result['environments'][env_name_key] = {
                     'pattern': f"{prefix}-{env_name_original}-*",
                     'name': env_name_original,  # Store original case for display
-                    'lines': [f"Host {prefix}-{env_name_original}-*"]
+                    'lines': [
+                        f"Host {self._host_line_value(f'{prefix}-{env_name_original}-*')}"
+                    ]
                 }
 
             # Add host entry
@@ -1515,7 +1610,7 @@ class CloudXSetup:
             str: Generic configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-*
+        config = f"""Host {self._host_line_value(f"{self.ssh_host_prefix}-*")}
     User ec2-user
     TCPKeepAlive yes
     IdentitiesOnly yes
@@ -1546,7 +1641,7 @@ class CloudXSetup:
             str: Environment configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-*
+        config = f"""Host {self._host_line_value(f"{self.ssh_host_prefix}-{cloudx_env}-*")}
 """
         # Add authentication configuration
         config += self._build_auth_config()
@@ -1626,7 +1721,10 @@ class CloudXSetup:
                 parsed['environments'][env_key] = {
                     'pattern': env_pattern,
                     'name': cloudx_env,
-                    'lines': [f"Host {env_pattern}", *self._build_environment_config(cloudx_env).split('\n')[1:]]
+                    'lines': [
+                        f"Host {self._host_line_value(env_pattern)}",
+                        *self._build_environment_config(cloudx_env).split('\n')[1:],
+                    ]
                 }
                 self.print_status(f"Created new environment section for '{cloudx_env}'", None, 2)
             else:

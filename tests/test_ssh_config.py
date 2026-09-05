@@ -47,6 +47,15 @@ def host_names(content):
     ]
 
 
+def host_patterns(content):
+    """The canonical (first) pattern of every Host/Match header, in order.
+
+    Wildcard blocks carry one pattern per prefix spelling, so the header line
+    is not the pattern; this is what to count sections by.
+    """
+    return [line.split()[1] for line in host_names(content)]
+
+
 MANAGED = """Host cloudx-*
     User ec2-user
 
@@ -210,8 +219,8 @@ class TestEnvironmentNameCase:
         assert setup._add_host_entry(env, "i-00000000", "web2", config) is True
 
         result = setup.ssh_config_file.read_text()
-        assert host_names(result).count("Host cloudx-dev-*") == 1
-        assert "Host cloudx-Dev-*" not in result
+        assert host_patterns(result).count("cloudx-dev-*") == 1
+        assert "cloudx-Dev-*" not in result
         assert "Host cloudx-dev-web2" in result
 
     def test_add_host_entry_normalises_case_on_its_own(self, setup):
@@ -221,7 +230,7 @@ class TestEnvironmentNameCase:
         assert setup._add_host_entry("DEV", "i-00000000", "web2", config) is True
 
         result = setup.ssh_config_file.read_text()
-        assert host_names(result).count("Host cloudx-dev-*") == 1
+        assert host_patterns(result).count("cloudx-dev-*") == 1
         assert "Host cloudx-dev-web2" in result
 
     def test_resolve_keeps_new_environment_untouched(self, setup):
@@ -517,7 +526,7 @@ Host cloudX-DTA-unified
         setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
 
         lines = self.managed_host_lines(setup)
-        assert "Host cloudX-*" in lines
+        assert "Host cloudX-* cloudx-*" in lines
         assert "Host cloudx-*" not in lines
 
     def test_cleanup_normalises_it_too(self, tmp_path):
@@ -526,11 +535,17 @@ Host cloudX-DTA-unified
         setup.cleanup_config()
 
         lines = self.managed_host_lines(setup)
-        assert "Host cloudX-*" in lines
+        assert "Host cloudX-* cloudx-*" in lines
         assert "Host cloudx-*" not in lines
 
-    def test_every_managed_host_line_uses_one_case(self, tmp_path):
-        """The invariant: a written file never disagrees with itself."""
+    def test_every_managed_host_line_leads_with_one_case(self, tmp_path):
+        """The invariant: a written file never disagrees with itself.
+
+        Wildcard blocks additionally answer to the other spelling, so that a
+        host entry left behind in the other case still picks them up - but the
+        canonical pattern always comes first and always uses the configured
+        case.
+        """
         setup = self.uppercase_setup(tmp_path)
 
         setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
@@ -700,3 +715,139 @@ Host cloudX-dev-web1
 
         assert setup.ssh_config_file.read_text() == once
         assert once.count("--profile cloudx") == 1
+
+
+class TestBothPrefixSpellingsMatch:
+    """A config may spell the prefix either way, in the same file.
+
+    ssh matches Host patterns case-sensitively and its pattern syntax has only
+    '*' and '?' - `cloud[xX]-*` is a literal hostname, not a character class -
+    so one spelling in a wildcard block cannot cover the other. Wildcard blocks
+    therefore list every spelling; a Host line matches if any of its patterns
+    does.
+    """
+
+    MIXED = """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudx-*
+    User ec2-user
+    IdentitiesOnly yes
+
+Host cloudX-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+"""
+
+    def make(self, tmp_path, content, prefix="cloudX"):
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True, exist_ok=True)
+        (ssh_dir / "config").write_text(content)
+        return CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix=prefix, non_interactive=True
+        )
+
+    def test_wildcard_blocks_list_both_spellings(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+
+        lines = host_names(setup.ssh_config_file.read_text())
+        assert "Host cloudX-* cloudx-*" in lines
+        assert "Host cloudX-dev-* cloudx-dev-*" in lines
+
+    def test_host_entries_keep_a_single_name(self, tmp_path):
+        """They are what `list` reports and what VSCode offers."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+
+        entries = [
+            line for line in host_names(setup.ssh_config_file.read_text())
+            if "*" not in line
+        ]
+        assert entries == ["Host cloudX-dev-web1"]
+
+    def test_a_lowercase_config_answers_to_the_uppercase_prefix_too(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudx")
+
+        setup.cleanup_config()
+
+        lines = host_names(setup.ssh_config_file.read_text())
+        assert "Host cloudx-* cloudX-*" in lines
+        assert "Host cloudx-dev-* cloudX-dev-*" in lines
+
+    def test_the_widened_form_round_trips(self, tmp_path):
+        """Our own output must be recognised as ours, or a second rewrite would
+        file the block under 'not managed' and generate a duplicate."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+        once = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+        twice = setup.ssh_config_file.read_text()
+
+        assert twice == once
+        assert "NOT MANAGED" not in twice
+        assert host_patterns(twice).count("cloudX-*") == 1
+
+    def test_a_users_multi_host_line_stays_theirs(self, tmp_path):
+        """Patterns that differ by more than case name different hosts."""
+        setup = self.make(tmp_path, self.MIXED + """
+Host buildbox releasebox
+    User jenkins
+""")
+
+        setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        assert "NOT MANAGED" in result
+        assert "Host buildbox releasebox" in result
+        assert "    User jenkins" in result
+
+    def test_a_hand_written_both_case_block_is_recognised(self, tmp_path):
+        """The form users write themselves to work around the case problem."""
+        setup = self.make(tmp_path, """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudX-dev-* cloudx-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+
+        parsed = setup._parse_ssh_config(setup.ssh_config_file.read_text())
+
+        assert parsed["other"] == []
+        assert "dev" in parsed["environments"]
+
+    def test_an_unrelated_prefix_gains_no_spellings(self, tmp_path):
+        setup = self.make(tmp_path, """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host vscode-*
+    User ec2-user
+
+Host vscode-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host vscode-dev-web1
+    HostName i-0123456789abcdef0
+""", prefix="vscode")
+
+        setup.cleanup_config()
+
+        for line in host_names(setup.ssh_config_file.read_text()):
+            assert len(line.split()) == 2, f"invented a spelling: {line!r}"
+
+    def test_variants_only_vary_the_prefix(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED)
+
+        assert setup._host_pattern_variants("cloudX-Pre-Prod-*") == [
+            "cloudX-Pre-Prod-*",
+            "cloudx-Pre-Prod-*",
+        ]
+        assert setup._host_pattern_variants("unrelated-*") == ["unrelated-*"]

@@ -108,13 +108,29 @@ Host cloudX-Prod-foobar
 - The `Environment` tag determines the environment part
 - The `Name` tag (or user-specified hostname) determines the hostname part
 
+## Prefix Case
+
+ssh matches `Host` **patterns** case-sensitively, and the pattern syntax supports
+only `*` and `?` - `cloud[xX]-*` is a literal hostname, not a character class. A
+block written as `Host cloudX-*` therefore does not apply to a host entry spelled
+`cloudx-dev-web1`, and both spellings exist in the wild (two command names, older
+releases, hand edits).
+
+Wildcard blocks are consequently written with one pattern per prefix spelling -
+`Host cloudX-* cloudx-*` - since a `Host` line takes any number of patterns and
+matches if any one of them does. The configured spelling always comes first.
+
+Host entries keep a single name in the configured case: they are what `list`
+reports and what VSCode offers, and a second spelling of the prefix would not help
+anyone typing a different case further along the name.
+
 ## Configuration Inheritance
 
 SSH applies configurations from most specific to least specific. When connecting to `cloudX-Prod-foobar`:
 
 1. **Host cloudX-Prod-foobar** matches first → sets `HostName`
-2. **Host cloudX-Prod-*** matches next → sets `IdentityFile`, `IdentitiesOnly`, `ProxyCommand`
-3. **Host cloudX-*** matches last → sets `User`, `TCPKeepAlive`, `Control*`
+2. **Host cloudX-Prod-* cloudx-Prod-*** matches next → sets `IdentityFile`, `IdentitiesOnly`, `ProxyCommand`
+3. **Host cloudX-* cloudx-*** matches last → sets `User`, `TCPKeepAlive`, `Control*`
 
 The result is a fully configured connection with all necessary settings.
 
