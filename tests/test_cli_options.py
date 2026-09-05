@@ -9,10 +9,12 @@ None to an UNSET sentinel in the meantime. Click supports this natively via
 upgrade that changes it fails here rather than in the field.
 """
 
+import ntpath
+
 import pytest
 from click.testing import CliRunner
 
-from cloudx_proxy.cli import cli
+from cloudx_proxy.cli import cli, prefix_from_command_name
 from cloudx_proxy.setup import CloudXSetup, plural
 
 
@@ -349,3 +351,30 @@ class TestPluralHelper:
     def test_irregular(self):
         assert plural(1, "host entry", "host entries") == "1 host entry"
         assert plural(2, "host entry", "host entries") == "2 host entries"
+
+
+class TestPrefixFromCommandName:
+    """On Windows a console script is an .exe.
+
+    sys.argv[0] therefore ends in one, a bare basename never equalled
+    'cloudX-proxy', and every Windows user silently got the lowercase prefix
+    whichever of the two commands they typed.
+    """
+
+    def test_posix(self, monkeypatch):
+        for argv0, expected in (
+            ("/home/erik/.local/bin/cloudX-proxy", "cloudX"),
+            ("/home/erik/.local/bin/cloudx-proxy", "cloudx"),
+            ("cloudX-proxy", "cloudX"),
+        ):
+            monkeypatch.setattr("cloudx_proxy.cli.sys.argv", [argv0])
+            assert prefix_from_command_name() == expected, argv0
+
+    def test_windows_exe(self, monkeypatch):
+        monkeypatch.setattr("cloudx_proxy.cli.os.path", ntpath)
+        for argv0, expected in (
+            (r"C:\Users\erik\AppData\Roaming\uv\tools\x\Scripts\cloudX-proxy.exe", "cloudX"),
+            (r"C:\Users\erik\AppData\Roaming\uv\tools\x\Scripts\cloudx-proxy.exe", "cloudx"),
+        ):
+            monkeypatch.setattr("cloudx_proxy.cli.sys.argv", [argv0])
+            assert prefix_from_command_name() == expected, argv0

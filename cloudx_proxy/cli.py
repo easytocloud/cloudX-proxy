@@ -31,6 +31,20 @@ def detect_ssh_defaults() -> tuple:
         return "cloudX", "cloudX", "~/.ssh/cloudX"
 
 
+def prefix_from_command_name() -> str:
+    """The host prefix implied by the command name that was invoked.
+
+    On Windows a console script is an .exe, so sys.argv[0] ends in one and a
+    bare basename never equals 'cloudX-proxy' - every Windows user silently
+    got the lowercase prefix whichever command they typed. Compare the stem.
+
+    Returns:
+        str: 'cloudX' when invoked as cloudX-proxy, otherwise 'cloudx'
+    """
+    stem = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+    return 'cloudX' if stem == 'cloudX-proxy' else 'cloudx'
+
+
 def short_host_name(host: str, host_prefix: str) -> str:
     """Strip '<prefix>-<env>-' off a host entry to get its short name.
 
@@ -188,8 +202,7 @@ def setup(profile: str, ssh_key: str, ssh_config: str, ssh_dir: str, aws_env: st
     try:
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
-            cmd_name = os.path.basename(sys.argv[0])
-            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+            ssh_host_prefix = prefix_from_command_name()
 
         setup = CloudXSetup(
             profile=profile,
@@ -355,8 +368,7 @@ def list(ssh_config: str, environment: str, detailed: bool, dry_run: bool):
             sys.exit(1)
 
         # Detect ssh_host_prefix from command name
-        cmd_name = os.path.basename(sys.argv[0])
-        ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+        ssh_host_prefix = prefix_from_command_name()
 
         # Use shared parser from CloudXSetup
         setup = CloudXSetup(ssh_config=str(config_file), ssh_host_prefix=ssh_host_prefix)
@@ -522,8 +534,7 @@ def cleanup(ssh_config: str, ssh_host_prefix: str, dry_run: bool):
 
         # Determine default prefix based on command name if not provided
         if not ssh_host_prefix:
-            cmd_name = os.path.basename(sys.argv[0])
-            ssh_host_prefix = 'cloudX' if cmd_name == 'cloudX-proxy' else 'cloudx'
+            ssh_host_prefix = prefix_from_command_name()
 
         setup = CloudXSetup(ssh_config=ssh_config, ssh_host_prefix=ssh_host_prefix, dry_run=dry_run)
 
