@@ -587,22 +587,38 @@ Host cloudx-dev-web1
 
 
 class TestNormalizeManagedHostLine:
-    def test_wrong_case_prefix_is_corrected(self, setup):
-        assert setup._normalize_managed_host_line("Host cloudX-dev-web1") == "Host cloudx-dev-web1"
+    """The wildcard blocks answer to both spellings; entries are left alone."""
 
-    def test_correct_case_is_untouched(self, setup):
-        assert setup._normalize_managed_host_line("Host cloudx-dev-web1") == "Host cloudx-dev-web1"
+    def test_a_wildcard_block_gains_the_other_spelling(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-*"
+        ) == "Host cloudx-dev-* cloudX-dev-*"
+
+    def test_the_widened_form_is_idempotent(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudx-dev-* cloudX-dev-*"
+        ) == "Host cloudx-dev-* cloudX-dev-*"
+
+    def test_a_host_entry_keeps_the_case_its_owner_gave_it(self, setup):
+        """cloudX is the product name, but naming an instance cloudx-dev-web1
+        is the user's call - and the widened blocks above match it either way."""
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-web1"
+        ) == "Host cloudX-dev-web1"
+        assert setup._normalize_managed_host_line(
+            "Host cloudx-dev-web1"
+        ) == "Host cloudx-dev-web1"
 
     def test_inline_comment_survives(self, setup):
         assert setup._normalize_managed_host_line(
-            "Host cloudX-dev-web1 # erik's box"
-        ) == "Host cloudx-dev-web1 # erik's box"
+            "Host cloudX-dev-*  # erik's env"
+        ) == "Host cloudx-dev-* cloudX-dev-*  # erik's env"
 
     def test_only_the_prefix_is_touched(self, setup):
-        """A host whose own name contains the prefix spelling is not rewritten."""
+        """A pattern whose own body contains the prefix spelling is not rewritten."""
         assert setup._normalize_managed_host_line(
-            "Host cloudX-dev-cloudX-thing"
-        ) == "Host cloudx-dev-cloudX-thing"
+            "Host cloudX-dev-cloudX-*"
+        ) == "Host cloudx-dev-cloudX-* cloudX-dev-cloudX-*"
 
     def test_a_non_host_line_is_untouched(self, setup):
         assert setup._normalize_managed_host_line("    User ec2-user") == "    User ec2-user"
@@ -758,8 +774,9 @@ Host cloudx-dev-web1
         assert "Host cloudX-* cloudx-*" in lines
         assert "Host cloudX-dev-* cloudx-dev-*" in lines
 
-    def test_host_entries_keep_a_single_name(self, tmp_path):
-        """They are what `list` reports and what VSCode offers."""
+    def test_host_entries_keep_the_name_their_owner_gave_them(self, tmp_path):
+        """They are what the user types, what `list` reports and what VSCode
+        offers - and `cloudx-dev-web1` is a legitimate thing to call a box."""
         setup = self.make(tmp_path, self.MIXED)
 
         setup.cleanup_config()
@@ -768,7 +785,47 @@ Host cloudx-dev-web1
             line for line in host_names(setup.ssh_config_file.read_text())
             if "*" not in line
         ]
-        assert entries == ["Host cloudX-dev-web1"]
+        assert entries == ["Host cloudx-dev-web1"]
+
+    def test_a_lowercase_entry_still_resolves_its_settings(self, tmp_path):
+        """The point of widening: the entry keeps its name and still inherits."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudx-dev-web1" in result
+        assert "Host cloudX-dev-* cloudx-dev-*" in result
+
+    def test_converting_the_command_name_does_not_rename_instances(self, tmp_path):
+        """cleanup run as cloudX-proxy converts the patterns, not the boxes."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.cleanup_config()
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudx-dev-web1" in result
+        assert "Host cloudX-dev-web1" not in result
+
+    def test_reregistering_a_host_keeps_its_name(self, tmp_path):
+        """Only the instance id is being updated - not what the box is called."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web1")
+        result = setup.ssh_config_file.read_text()
+
+        entries = [line for line in host_names(result) if "*" not in line]
+        assert entries == ["Host cloudx-dev-web1"]
+        assert "HostName i-9999999999999999" in result
+        assert "HostName i-0123456789abcdef0" not in result
+
+    def test_a_brand_new_host_uses_the_configured_case(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web9")
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudX-dev-web9" in result
 
     def test_a_lowercase_config_answers_to_the_uppercase_prefix_too(self, tmp_path):
         setup = self.make(tmp_path, self.MIXED, prefix="cloudx")

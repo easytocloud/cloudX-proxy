@@ -120,9 +120,17 @@ Wildcard blocks are consequently written with one pattern per prefix spelling -
 `Host cloudX-* cloudx-*` - since a `Host` line takes any number of patterns and
 matches if any one of them does. The configured spelling always comes first.
 
-Host entries keep a single name in the configured case: they are what `list`
-reports and what VSCode offers, and a second spelling of the prefix would not help
-anyone typing a different case further along the name.
+Only the prefix varies between the patterns. The environment part is set by
+whoever rolled out the environment stack and the host part is chosen by the user;
+both are written exactly as given.
+
+Host entries are never rewritten. `cloudX` is the product's name - the X is ten,
+after Cloud9 - but people who would rather not reach for shift call their instance
+`cloudx-dev-something`, and that name is theirs: it is what they type, what `list`
+reports and what VSCode offers. The widened wildcard blocks match it either way, so
+it does not need renaming to inherit its settings. Re-running `setup` for an
+existing host updates its `HostName` and keeps its name; only a brand new entry is
+written in the configured case.
 
 ## Configuration Inheritance
 

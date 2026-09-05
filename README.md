@@ -435,7 +435,12 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 > ssh matches `Host` patterns case-sensitively, and its pattern syntax has only
 > `*` and `?` - there is no `[xX]` character class. Wildcard blocks therefore list
 > both spellings, so a config that mixes them keeps working; the first pattern is
-> the one the command name chose. Host entries name one host and keep one name.
+> the one the command name chose.
+>
+> Only the prefix varies. The environment part is fixed by whoever rolled out the
+> environment stack, and the host part is chosen by the user - both are written
+> exactly as given. An instance called `cloudx-dev-web1` keeps that name and still
+> picks up its settings from `Host cloudX-dev-* cloudx-dev-*`.
 >
 > Run `cleanup` with your preferred command to normalize existing configurations.
 
@@ -576,9 +581,10 @@ uvx cloudX-proxy cleanup --ssh-config ~/.ssh/custom/config
 - Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-* cloudx-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
 - Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-* cloudX-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
 
-Wildcard blocks keep both spellings so that host entries left behind in the other
-case still pick up `User`, `IdentitiesOnly` and the `ProxyCommand`; host entries
-themselves are renamed to the chosen case.
+Wildcard blocks keep both spellings so that host entries in either case pick up
+`User`, `IdentitiesOnly` and the `ProxyCommand`. Host entries are **not** renamed:
+what an instance is called belongs to whoever created it. Re-running `setup` for a
+host that already exists updates its instance id and leaves its name alone.
 
 This allows users to easily convert between naming conventions. The preferred convention is `cloudX` (uppercase X).
 

@@ -1170,10 +1170,14 @@ class CloudXSetup:
 
         Wildcard blocks are therefore written with one pattern per prefix
         spelling, which covers the mixed-case files already out there instead
-        of merely refusing to add to them. Host entries name one host and keep
-        one name, in the configured case: they are what `list` reports and what
-        VSCode offers, and a second spelling of the prefix would not help
-        anyone typing a different case further along the name anyway.
+        of merely refusing to add to them.
+
+        Host entries are left exactly as they are. `cloudX` is the product's
+        name - the X is ten, after Cloud9 - but people who dislike reaching for
+        shift call their instance `cloudx-dev-something`, and that name is
+        theirs: it is what they type, what `list` reports and what VSCode
+        offers. Since the wildcard blocks above now answer to both spellings,
+        the entry does not need renaming to pick up its settings.
 
         Args:
             line: A managed block's Host line
@@ -1200,8 +1204,11 @@ class CloudXSetup:
         if collapsed[:prefix_len + 1].lower() != f"{self.ssh_host_prefix.lower()}-":
             return line
 
+        if '*' not in collapsed:
+            return line
+
         canonical = f"{self.ssh_host_prefix}{collapsed[prefix_len:]}"
-        patterns = self._host_pattern_variants(canonical) if '*' in canonical else [canonical]
+        patterns = self._host_pattern_variants(canonical)
 
         return f"{indent}{keyword}{gap}{' '.join(patterns)}{gap_before_comment}{tail}"
 
@@ -1587,9 +1594,12 @@ class CloudXSetup:
         # Determine the "other" prefix to replace
         other_prefix = 'cloudx' if self.ssh_host_prefix == 'cloudX' else 'cloudX'
 
-        # Replace in Host patterns: Host cloudX-* or Host cloudx-*
+        # Replace in wildcard Host patterns only: Host cloudX-* or Host
+        # cloudx-*. A host entry carries no '*', and its name belongs to
+        # whoever created the instance - converting the command name must not
+        # rename it out from under them.
         content = re.sub(
-            rf'\bHost {other_prefix}-',
+            rf'\bHost {other_prefix}-(?=\S*\*)',
             f'Host {self.ssh_host_prefix}-',
             content
         )
@@ -1652,19 +1662,22 @@ class CloudXSetup:
 
         return config
         
-    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str) -> str:
+    def _build_host_config(self, cloudx_env: str, hostname: str, instance_id: str,
+                           host_name: str | None = None) -> str:
         """Build a host-specific configuration block.
 
         Args:
             cloudx_env: CloudX environment
             hostname: Hostname for the instance
             instance_id: EC2 instance ID
+            host_name: Full name to write, when an entry already exists under a
+                name of its own. New entries use the configured prefix.
 
         Returns:
             str: Host configuration block
         """
         # No metadata comments - handled by _organize_ssh_config
-        config = f"""Host {self.ssh_host_prefix}-{cloudx_env}-{hostname}
+        config = f"""Host {host_name or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"}
     HostName {instance_id}
 """
 
@@ -1711,8 +1724,8 @@ class CloudXSetup:
                 cloudx_env = existing_env.get('name', cloudx_env)
 
             host_pattern = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-            new_host_entry = self._build_host_config(cloudx_env, hostname, instance_id)
             host_existed = False
+            existing_host_name = None
 
             # Ensure environment section exists
             if existing_env is None:
@@ -1739,13 +1752,20 @@ class CloudXSetup:
                         skipping = entry.lower() == host_pattern.lower()
                         if skipping:
                             host_existed = True
+                            existing_host_name = entry
                             continue
                     elif skipping:
                         continue
                     new_lines.append(line)
                 existing_env['lines'] = new_lines
 
-            # Add new host entry
+            # Add new host entry. An entry that is already there keeps the
+            # name it has: cloudX is the product's name, but calling the box
+            # cloudx-dev-web1 is its owner's call and it is what they type -
+            # only the instance id is being updated here.
+            new_host_entry = self._build_host_config(
+                cloudx_env, hostname, instance_id, host_name=existing_host_name
+            )
             parsed['environments'][env_key]['lines'].extend(new_host_entry.split('\n'))
 
             # Rebuild config with organization
