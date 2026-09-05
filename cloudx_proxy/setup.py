@@ -313,7 +313,7 @@ class CloudXSetup:
                     None,
                     2,
                 )
-                self.print_status("1Password integration is not supported in this configuration", False, 2)
+                self.print_status("1Password integration is not supported in this configuration", None, 2)
                 return False
             self.print_status("1Password SSH agent pipe is available", True, 2)
             return True
@@ -328,13 +328,13 @@ class CloudXSetup:
                 if current_target != self.op_agent_sock_macos and self.op_agent_sock_macos.exists():
                     self.print_status("Updating 1Password agent symlink to default location", None, 2)
                     if not self._ensure_op_agent_symlink():
-                        self.print_status("1Password integration is not supported in this configuration", False, 2)
+                        self.print_status("1Password integration is not supported in this configuration", None, 2)
                         return False
 
             self.print_status("1Password SSH agent socket is available", True, 2)
             return True
 
-        self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", False, 2)
+        self.print_status("1Password SSH agent socket not found at ~/.1password/agent.sock", None, 2)
 
         if system == 'Darwin':
             if self._ensure_op_agent_symlink():
@@ -349,7 +349,7 @@ class CloudXSetup:
 
         self.print_status("1Password SSH agent is not available", False, 2)
         self.print_status("Please ensure 1Password SSH agent is enabled in 1Password settings", None, 2)
-        self.print_status("1Password integration is not supported in this configuration", False, 2)
+        self.print_status("1Password integration is not supported in this configuration", None, 2)
         return False
 
     def _op_identity_agent(self) -> str | None:
@@ -434,13 +434,33 @@ class CloudXSetup:
         """
         print(f"\n{header(f'=== {text} ===')}")
 
+    # Output grid. Three indents and three symbols, used the same way
+    # everywhere, so a run can be skimmed down the left edge:
+    #
+    #   === Section ===          a phase of the command (print_header)
+    #   ○ Doing something...     STEP:   one operation within the section
+    #     ✓ It worked            DETAIL: what that step found or did
+    #       ○ ...                SUB:    detail of a nested operation
+    #
+    #   ○  neutral - about to happen, in progress, informational, or a
+    #      dry-run preview
+    #   ✓  true now - succeeded, exists, verified
+    #   ✗  wrong - failed, missing, invalid. The problem takes the ✗; its
+    #      consequences and the advice that follows are ○, so one failure
+    #      shows as one ✗.
+    INDENT_STEP = 0
+    INDENT_DETAIL = 2
+    INDENT_SUB = 4
+
     def print_status(self, message: str, status: bool | None = None, indent: int = 0) -> None:
         """Print a status message with optional checkmark/cross.
 
         Args:
             message: The message to print
-            status: True for success (✓), False for failure (✗), None for no symbol
-            indent: Number of spaces to indent
+            status: True for success (✓), False for failure (✗), None for
+                neutral (○) - see the output grid above
+            indent: Number of spaces to indent: 0 for a step, 2 for a detail
+                of it, 4 for a detail of a nested operation
         """
         prefix = " " * indent
         print(f"{prefix}{status_symbol(status)} {message}")
@@ -535,10 +555,12 @@ class CloudXSetup:
         self.print_header("Prerequisites")
 
         if self.dry_run:
+            self.print_status("[DRY RUN] Would check for required tools")
             for tool in self.REQUIRED_TOOLS:
                 self.print_status(f"[DRY RUN] Would check for {tool}", None, 2)
             return True
 
+        self.print_status("Checking required tools...")
         all_found = True
         for tool, install_url in self.REQUIRED_TOOLS.items():
             name = f"{tool}.exe" if platform.system() == 'Windows' and tool == 'aws' else tool
@@ -587,9 +609,9 @@ class CloudXSetup:
                 session = boto3.Session(profile_name=self.profile)
             except Exception:
                 # Profile doesn't exist, create it
-                self.print_status(f"AWS profile '{self.profile}' not found", False, 2)
+                self.print_status(f"AWS profile '{self.profile}' not found", None, 2)
                 self.print_status("Setting up AWS profile...", None, 2)
-                print(info("Please enter your AWS credentials:"))
+                self.print_status(info("Please enter your AWS credentials:"), None, 2)
                 
                 # Use aws configure command
                 subprocess.run([
@@ -762,9 +784,9 @@ class CloudXSetup:
                     self.print_status(f"Specified vault '{self.op_vault}' not found", False, 2)
                     
                     # Display available vaults
-                    print(f"\n{info('Available 1Password vaults:')}")
+                    self.print_status(info('Available 1Password vaults:'), None, 2)
                     for i, vault in enumerate(vaults):
-                        print(f"  {i+1}. {vault['name']}")
+                        print(f"    {i + 1}. {vault['name']}")
                     
                     # Let user select vault
                     vault_num = self.prompt("Select vault number to store SSH key", "1")
@@ -780,9 +802,9 @@ class CloudXSetup:
             else:
                 # No vault specified, prompt the user
                 self.print_status("Creating a new SSH key in 1Password", None, 2)
-                print(f"\n{info('Available 1Password vaults:')}")
+                self.print_status(info('Available 1Password vaults:'), None, 2)
                 for i, vault in enumerate(vaults):
-                    print(f"  {i+1}. {vault['name']}")
+                    print(f"    {i + 1}. {vault['name']}")
                 
                 # Let user select vault
                 vault_num = self.prompt("Select vault number to store SSH key", "1")
@@ -1868,7 +1890,10 @@ class CloudXSetup:
             bool: True if cleanup was successful
         """
         try:
+            self.print_header("Cleanup")
+
             if not self.ssh_config_file.exists():
+                self.print_status("Reorganizing SSH configuration...")
                 self.print_status(f"SSH config file not found: {self.ssh_config_file}", False, 2)
                 return False
 
@@ -1881,6 +1906,7 @@ class CloudXSetup:
 
             # For dry-run, show what would be cleaned up
             if self.dry_run:
+                self.print_status("[DRY RUN] Would reorganize the SSH configuration")
                 self.print_status("Parsing SSH config...", None, 2)
                 parsed = self._parse_ssh_config(current_config)
 
@@ -1899,6 +1925,7 @@ class CloudXSetup:
                 return True
 
             # Parse existing config
+            self.print_status("Reorganizing SSH configuration...")
             self.print_status("Parsing SSH config...", None, 2)
             parsed = self._parse_ssh_config(current_config)
 
@@ -1918,7 +1945,7 @@ class CloudXSetup:
                 parsed['environments'][env_name]['lines'] = new_lines
 
             # Reorganize with proper structure
-            self.print_status("Reorganizing configuration...", None, 2)
+            self.print_status("Rebuilding the file...", None, 2)
             organized_config = self._organize_ssh_config(
                 parsed['global'] or self._build_generic_config(),
                 parsed['environments'],
@@ -2232,7 +2259,7 @@ class CloudXSetup:
             bool: True if instance is accessible
         """
         ssh_host = f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
-        self.print_status(f"Checking SSH connection to {ssh_host}...", None, 4)
+        self.print_status(f"Checking SSH connection to {ssh_host}...", None, 2)
         
         try:
             # Try to connect with a simple command that will exit immediately.
@@ -2254,24 +2281,24 @@ class CloudXSetup:
             )
 
             if result.returncode == 0:
-                self.print_status("SSH connection successful", True, 4)
+                self.print_status("SSH connection successful", True, 2)
                 return True
             else:
-                self.print_status("SSH connection failed", False, 4)
+                self.print_status("SSH connection failed", False, 2)
                 if "Connection refused" in result.stderr:
-                    self.print_status("Instance appears to be starting up. Please try again in a few minutes.", None, 4)
+                    self.print_status("Instance appears to be starting up. Please try again in a few minutes.", None, 2)
                 elif "Connection timed out" in result.stderr:
-                    self.print_status("Instance may be stopped. Please start it through the appropriate channels.", None, 4)
+                    self.print_status("Instance may be stopped. Please start it through the appropriate channels.", None, 2)
                 else:
-                    self.print_status(f"Error: {result.stderr.strip()}", None, 4)
+                    self.print_status(f"Error: {result.stderr.strip()}", None, 2)
                 return False
                 
         except subprocess.TimeoutExpired:
-            self.print_status("SSH connection timed out", False, 4)
-            self.print_status("Instance may be stopped or still starting up", None, 4)
+            self.print_status("SSH connection timed out", False, 2)
+            self.print_status("Instance may be stopped or still starting up", None, 2)
             return False
         except Exception as e:
-            self.print_status(f"Error checking SSH connection: {e!s}", False, 4)
+            self.print_status(f"Error checking SSH connection: {e!s}", False, 2)
             return False
 
     def wait_for_setup_completion(self, instance_id: str, hostname: str, cloudx_env: str) -> bool:
@@ -2293,13 +2320,19 @@ class CloudXSetup:
             self.print_status("[DRY RUN] Would wait up to 5 minutes for SSH access if needed", None, 2)
             return True
         
+        self.print_status("Checking instance accessibility...")
+
         # On Windows, skip the automated connection test as it may hang
         # Instead, provide clear instructions for manual testing
         if platform.system() == 'Windows':
             self.print_status("Skipping automated connection test on Windows", None, 2)
             print(f"\n{info('='*60)}")
             print(info("Setup completed! To test your SSH connection, run:"))
-            print(f"\n  {format_command(f'ssh {self.ssh_host_prefix}-{cloudx_env}-{hostname}')}")
+            connect_name = (
+                self.last_host_entry_name
+                or f"{self.ssh_host_prefix}-{cloudx_env}-{hostname}"
+            )
+            print(f"\n  {format_command(f'ssh {connect_name}')}")
             print(f"\n{info('='*60)}\n")
             self.print_status("Configuration files have been created successfully", True, 2)
             return True
@@ -2352,13 +2385,15 @@ class CloudXSetup:
             # Show what would be replaced
             old_dir_name = vscode_dir.name
             new_dir_name = target_dir.name
-            self.print_status(f"  - Replace /{old_dir_name}/ with /{new_dir_name}/", None, 3)
-            self.print_status(f"  - Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 3)
-            self.print_status(f"  - Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 3)
+            self.print_status(f"Replace /{old_dir_name}/ with /{new_dir_name}/", None, 4)
+            self.print_status(f"Replace ~/.ssh/{old_dir_name} with ~/.ssh/{new_dir_name}", None, 4)
+            self.print_status(f"Replace --ssh-key {old_dir_name} with --ssh-key {new_dir_name}", None, 4)
 
             self.print_status("[DRY RUN] Would update ~/.ssh/config to include new config path", None, 2)
             return True
             
+        self.print_status(f"Migrating to {target_dir}...")
+
         if not vscode_dir.exists():
             self.print_status(f"Source directory {vscode_dir} does not exist", False, 2)
             return False
@@ -2456,6 +2491,7 @@ class CloudXSetup:
             return False
             
         self.print_header("Migration Available")
+        self.print_status("Checking for a legacy ~/.ssh/vscode configuration...")
         self.print_status("Found existing configuration in ~/.ssh/vscode", None, 2)
         self.print_status("The default directory is now ~/.ssh/cloudX", None, 2)
         

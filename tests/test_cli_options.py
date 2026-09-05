@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from cloudx_proxy.cli import cli
+from cloudx_proxy.setup import CloudXSetup
 
 
 def run_setup(tmp_path, monkeypatch, extra_args):
@@ -134,10 +135,79 @@ Host cloudx-empty-* cloudX-empty-*
         assert "cloudX-empty-*" in result.output
 
 
-class TestOutputSpacing:
+SYMBOLS = ("\u25cb", "\u2713", "\u2717")  # neutral, success, failure
+
+
+def status_lines(output):
+    """Every status line as (indent, symbol, text)."""
+    parsed = []
+    for line in output.splitlines():
+        stripped = line.lstrip(" ")
+        if stripped[:1] in SYMBOLS:
+            parsed.append((len(line) - len(stripped), stripped[0], stripped[1:].strip()))
+    return parsed
+
+
+class TestOutputGrid:
     """`print_header` prepended two newlines while the banner above it appended
     one, so the first section sat under three blank lines and every section
-    after it under two."""
+    after it under two. Indents had drifted to 3 and to orphaned 2s and 4s.
+    """
+
+    def full_run(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", ["cloudX-proxy"])
+
+        return CliRunner().invoke(cli, [
+            "setup", "--dry-run", "--yes",
+            "--instance", "i-0123456789abcdef0",
+            "--hostname", "web1", "--environment", "dev",
+            "--ssh-config", str(tmp_path / "cloudX" / "config"),
+        ])
+
+    def test_every_status_line_sits_on_the_grid(self, tmp_path, monkeypatch):
+        result = self.full_run(tmp_path, monkeypatch)
+
+        lines = status_lines(result.output)
+        assert lines, result.output
+        for indent, _symbol, text in lines:
+            assert indent in (0, 2, 4), f"off-grid indent {indent}: {text!r}"
+
+    def test_no_detail_is_orphaned(self, tmp_path, monkeypatch):
+        """A detail belongs to a step, and a sub-detail to a detail."""
+        result = self.full_run(tmp_path, monkeypatch)
+
+        seen = set()
+        for line in result.output.splitlines():
+            if line.startswith("==="):
+                seen.clear()  # a header starts a new section
+                continue
+            stripped = line.lstrip(" ")
+            if stripped[:1] not in SYMBOLS:
+                continue
+            indent = len(line) - len(stripped)
+            if indent:
+                assert indent - 2 in seen, f"orphaned at indent {indent}: {stripped!r}"
+            seen.add(indent)
+
+    def test_cleanup_sits_on_the_grid_too(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", ["cloudX-proxy"])
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text(
+            "Host cloudX-dev-*\n    IdentityFile ~/.ssh/cloudX/cloudX\n\n"
+            "Host cloudX-dev-web1\n    HostName i-0123456789abcdef0\n"
+        )
+
+        result = CliRunner().invoke(
+            cli, ["cleanup", "--ssh-config", str(ssh_dir / "config")]
+        )
+
+        assert result.exit_code == 0, result.output
+        indents = [indent for indent, _s, _t in status_lines(result.output)]
+        assert indents, result.output
+        assert set(indents) <= {0, 2, 4}
+        assert 0 in indents, "cleanup's details had no step above them"
 
     def test_sections_are_separated_by_one_blank_line(self, tmp_path, monkeypatch):
         monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
@@ -167,3 +237,39 @@ class TestOutputSpacing:
         ])
 
         assert "=== cloudX-proxy Setup (DRY RUN) ===" in result.output
+
+
+class TestOneFailureOneCross:
+    """A ✗ marks the outcome, not every observation on the way to it.
+
+    The 1Password check reported "socket not found at ~/.1password/agent.sock"
+    as a failure before it had looked anywhere else, so a snap install saw a ✗
+    immediately followed by a ✓, and a genuine failure produced four marked
+    lines for one problem.
+    """
+
+    def linux_setup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("cloudx_proxy.setup.platform.system", lambda: "Linux")
+        setup = CloudXSetup(
+            ssh_dir=str(tmp_path / "cloudX"), non_interactive=True, op_vault="Private"
+        )
+        setup.op_agent_sock = tmp_path / "absent.sock"
+        setup.op_agent_sock_snap = tmp_path / "snap.sock"
+        return setup
+
+    def test_a_recoverable_miss_is_neutral(self, tmp_path, monkeypatch, capsys):
+        setup = self.linux_setup(tmp_path, monkeypatch)
+        setup.op_agent_sock_snap.write_text("")  # the snap agent is there
+
+        assert setup._check_op_agent() is True
+
+        marks = [symbol for _i, symbol, _t in status_lines(capsys.readouterr().out)]
+        assert "✗" not in marks, "a miss we recovered from was reported as a failure"
+
+    def test_a_real_failure_is_marked_once(self, tmp_path, monkeypatch, capsys):
+        setup = self.linux_setup(tmp_path, monkeypatch)
+
+        assert setup._check_op_agent() is False
+
+        marks = [symbol for _i, symbol, _t in status_lines(capsys.readouterr().out)]
+        assert marks.count("✗") == 1, f"one failure, one cross: {marks}"
