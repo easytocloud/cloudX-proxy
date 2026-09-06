@@ -1,3 +1,18 @@
+## [0.17.4](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.3...v0.17.4) (2026-09-06)
+
+
+### Bug Fixes
+
+* cleanup no longer deletes ProxyCommand flags ([5958bba](https://github.com/easytocloud/cloudX-proxy/commit/5958bbaa4db313d0ec4cd5aa045f5a39f08a0ec3))
+* detect the command name on Windows too ([3f537c4](https://github.com/easytocloud/cloudX-proxy/commit/3f537c44c080e5eb8b7d66f02458bd2874bc379e))
+* dry run previews the patterns it will actually write ([d0911ac](https://github.com/easytocloud/cloudX-proxy/commit/d0911acdd24e80d3097654842516638ecf93382f))
+* find the 1Password SSH agent per platform ([8ae4860](https://github.com/easytocloud/cloudX-proxy/commit/8ae48605643daded0f40850a5e53446940da2fe4))
+* list shows patterns in the preferred spelling ([0c49ec5](https://github.com/easytocloud/cloudX-proxy/commit/0c49ec5202c4dda1c6e43a42c5cc15e5d10efb09))
+* never rename a host entry to the command name's case ([1b19d32](https://github.com/easytocloud/cloudX-proxy/commit/1b19d329b73484dc0601b7393968184c22dab62e))
+* stop stacking blank lines, and name the host that was written ([3e24b87](https://github.com/easytocloud/cloudX-proxy/commit/3e24b87e55fa67dc7587909180af210f12f25bc3))
+* wildcard Host blocks match every spelling of the prefix ([4532ecf](https://github.com/easytocloud/cloudX-proxy/commit/4532ecf97d31c4cfa06181a1c19675b53bf56c31))
+* write managed Host lines in one prefix case ([b551fe1](https://github.com/easytocloud/cloudX-proxy/commit/b551fe17325f4cbfb742eff980c833416d3208bc))
+
 ## [0.17.3](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.2...v0.17.3) (2026-09-04)
 
 
