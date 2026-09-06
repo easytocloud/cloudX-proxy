@@ -191,24 +191,60 @@ def without_version_header(content):
     ]
 
 
+def is_version_header(line):
+    return line.startswith("# SSH Configuration - Managed by")
+
+
+def widens_prefix(setup, old_line, new_line):
+    """True when a wildcard Host line only gained the other prefix spelling.
+
+    ssh matches Host patterns case-sensitively, so a block written as
+    `Host cloudx-*` does not apply to a host entry spelled `cloudX-dev-web1`,
+    and both spellings are out there. Wildcard blocks are therefore rewritten
+    to list every spelling. That is the one content change cleanup is allowed
+    to make to an existing config; a host entry never changes.
+    """
+    if not old_line.lower().startswith("host "):
+        return False
+
+    old_patterns = old_line.split()[1:]
+    if len(old_patterns) != 1 or "*" not in old_patterns[0]:
+        return False
+
+    return new_line.split()[1:] == setup._host_pattern_variants(old_patterns[0])
+
+
 class TestExistingConfigsAreUnchanged:
-    """cleanup rewrites the whole file; on an untouched config it must no-op."""
+    """cleanup rewrites the whole file; on an untouched config it must not
+    touch anything but the version stamp and the Host patterns."""
 
     @pytest.mark.parametrize("name", sorted(FIXTURES))
-    def test_cleanup_changes_nothing_but_the_version_stamp(self, tmp_path, name):
+    def test_cleanup_changes_nothing_it_may_not(self, tmp_path, name):
         template, kwargs = FIXTURES[name]
         setup, before = materialise(tmp_path, template, kwargs)
 
         assert setup.cleanup_config() is True
 
         after = setup.ssh_config_file.read_text()
-        assert without_version_header(after) == without_version_header(before), (
-            f"{name}: cleanup changed an existing v0.17.1 config"
-        )
+
+        # strict=True also pins the line count: nothing added, nothing dropped.
+        for old_line, new_line in zip(
+            before.splitlines(), after.splitlines(), strict=True
+        ):
+            if old_line == new_line:
+                continue
+            allowed = (
+                (is_version_header(old_line) and is_version_header(new_line))
+                or widens_prefix(setup, old_line, new_line)
+            )
+            assert allowed, (
+                f"{name}: cleanup changed an existing v0.17.1 config: "
+                f"{old_line!r} -> {new_line!r}"
+            )
 
     @pytest.mark.parametrize("name", sorted(FIXTURES))
-    def test_only_the_version_header_line_differs(self, tmp_path, name):
-        """Pin the exception: the header is restamped, nothing else may be."""
+    def test_host_entries_and_directives_are_untouched(self, tmp_path, name):
+        """Pin the exceptions: only the header and wildcard Host lines move."""
         template, kwargs = FIXTURES[name]
         setup, before = materialise(tmp_path, template, kwargs)
         setup.cleanup_config()
@@ -219,10 +255,18 @@ class TestExistingConfigsAreUnchanged:
             if a != b
         ]
 
-        assert len(differing) <= 1, f"{name}: more than the header changed: {differing}"
+        headers = [pair for pair in differing if is_version_header(pair[0])]
+        assert len(headers) == 1, f"{name}: the version stamp must be rewritten once"
+
         for old_line, new_line in differing:
-            assert old_line.startswith("# SSH Configuration - Managed by")
-            assert new_line.startswith("# SSH Configuration - Managed by")
+            if is_version_header(old_line):
+                continue
+            assert "*" in old_line, (
+                f"{name}: a host entry changed: {old_line!r} -> {new_line!r}"
+            )
+            assert widens_prefix(setup, old_line, new_line), (
+                f"{name}: unexpected change: {old_line!r} -> {new_line!r}"
+            )
 
     @pytest.mark.parametrize("name", sorted(FIXTURES))
     def test_a_backup_of_the_original_is_kept(self, tmp_path, name):

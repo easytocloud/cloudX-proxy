@@ -252,7 +252,7 @@ Will create a three-tier configuration structure like this:
 # Generic configuration (shared by all environments)
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: generic
-Host cloudX-*
+Host cloudX-* cloudx-*
     User ec2-user
     TCPKeepAlive yes
     ControlMaster auto
@@ -262,7 +262,7 @@ Host cloudX-*
 # Environment configuration (specific to a single environment)
 # Created by cloudX-proxy v1.0.0 on 2025-03-07 09:05:23
 # Configuration type: environment
-Host cloudX-dev-*
+Host cloudX-dev-* cloudx-dev-*
     IdentityFile ~/.ssh/cloudX/mykey
     IdentitiesOnly yes
     ProxyCommand uvx cloudX-proxy connect %h %p --profile myprofile --ssh-key mykey --ssh-dir ~/.ssh/cloudX
@@ -429,8 +429,23 @@ Understanding the connection flow helps with troubleshooting and explains why ce
 ### Command Line Options
 
 > **Note:** Both `cloudX-proxy` (preferred) and `cloudx-proxy` command names are available. The command name determines the prefix case used in SSH configurations:
-> - `cloudX-proxy` generates `Host cloudX-*` patterns (preferred)
-> - `cloudx-proxy` generates `Host cloudx-*` patterns
+> - `cloudX-proxy` generates `Host cloudX-* cloudx-*` patterns (preferred)
+> - `cloudx-proxy` generates `Host cloudx-* cloudX-*` patterns
+>
+> ssh matches `Host` patterns case-sensitively, and its pattern syntax has only
+> `*` and `?` - there is no `[xX]` character class. Wildcard blocks therefore list
+> both spellings, so a config that mixes them keeps working; the first pattern is
+> the one the command name chose.
+>
+> Only the prefix varies. The environment part is fixed by whoever rolled out the
+> environment stack, and the host part is chosen by the user - both are written
+> exactly as given. An instance called `cloudx-dev-web1` keeps that name and still
+> picks up its settings from `Host cloudX-dev-* cloudx-dev-*`.
+>
+> `list` reflects that split: hosts appear under the names their owners gave them,
+> while patterns are shown as `cloudX-*` whichever command name you type, since
+> `cloudX` is the preferred spelling. An environment with no hosts of its own is
+> listed only as a pattern (under `--detailed`), not as an environment.
 >
 > Run `cleanup` with your preferred command to normalize existing configurations.
 
@@ -568,8 +583,13 @@ uvx cloudX-proxy cleanup --ssh-config ~/.ssh/custom/config
 ```
 
 **Prefix Normalization:** The cleanup command normalizes all host patterns and ProxyCommand references to match the command name used:
-- Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
-- Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
+- Running `cloudX-proxy cleanup` converts `Host cloudx-*` → `Host cloudX-* cloudx-*` and `uvx cloudx-proxy` → `uvx cloudX-proxy`
+- Running `cloudx-proxy cleanup` converts `Host cloudX-*` → `Host cloudx-* cloudX-*` and `uvx cloudX-proxy` → `uvx cloudx-proxy`
+
+Wildcard blocks keep both spellings so that host entries in either case pick up
+`User`, `IdentitiesOnly` and the `ProxyCommand`. Host entries are **not** renamed:
+what an instance is called belongs to whoever created it. Re-running `setup` for a
+host that already exists updates its instance id and leaves its name alone.
 
 This allows users to easily convert between naming conventions. The preferred convention is `cloudX` (uppercase X).
 
@@ -675,7 +695,9 @@ These permissions are required to bootstrap the instance, so that after creation
    - **Region mismatch** - Ensure AWS profile region matches instance location
 
 4. **SSH Key Issues**
-   - If using 1Password SSH agent, verify agent is running (~/.1password/agent.sock exists)
+   - If using 1Password SSH agent, verify the agent is running. Where it lives depends on the platform:
+     * macOS/Linux: `~/.1password/agent.sock` exists (Linux snap installs: `~/snap/1password/current/.1password/agent.sock`)
+     * Windows: 1Password serves the standard OpenSSH named pipe `\\.\pipe\openssh-ssh-agent`, which ssh uses by default - there is no socket file and no `IdentityAgent` line is written
    - Check file permissions (600 for private key, 644 for public key)
    - Verify the public key is being successfully pushed to the instance
    - For 1Password-managed keys, make sure:

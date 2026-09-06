@@ -104,6 +104,32 @@ The project uses semantic-release with GitHub Actions:
 - `feat:` → minor version
 - `fix:`, `docs:`, `style:`, etc. → patch version
 
+## Console Output
+
+Three indents and three symbols, used the same way everywhere, so a run can be
+skimmed down the left edge. The rule lives next to `CloudXSetup.print_status`
+in `cloudx_proxy/setup.py`; `tests/test_cli_options.py` enforces it.
+
+```
+=== Section ===          a phase of the command (print_header)
+○ Doing something...     STEP:   one operation within the section
+  ✓ It worked            DETAIL: what that step found or did
+    ○ ...                SUB:    detail of a nested operation
+```
+
+- `○` neutral - about to happen, in progress, informational, or a dry-run
+  preview
+- `✓` true now - succeeded, exists, verified
+- `✗` wrong - failed, missing, invalid
+
+Indents are 0, 2 and 4; nothing else. A detail must have a step above it, and a
+sub-detail a detail. A ✗ marks the *outcome*: a condition the code goes on to
+recover from is `○`, so one failure shows as one ✗ rather than one per line on
+the way there.
+
+`print_header` emits a single blank line before the header, and callers printing
+a banner above the first section add none of their own - the two used to stack.
+
 ## Publishing to PyPI
 
 The package is automatically published to PyPI via GitHub Actions when a new release is created. Setup:

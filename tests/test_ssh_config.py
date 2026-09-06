@@ -47,6 +47,15 @@ def host_names(content):
     ]
 
 
+def host_patterns(content):
+    """The canonical (first) pattern of every Host/Match header, in order.
+
+    Wildcard blocks carry one pattern per prefix spelling, so the header line
+    is not the pattern; this is what to count sections by.
+    """
+    return [line.split()[1] for line in host_names(content)]
+
+
 MANAGED = """Host cloudx-*
     User ec2-user
 
@@ -210,8 +219,8 @@ class TestEnvironmentNameCase:
         assert setup._add_host_entry(env, "i-00000000", "web2", config) is True
 
         result = setup.ssh_config_file.read_text()
-        assert host_names(result).count("Host cloudx-dev-*") == 1
-        assert "Host cloudx-Dev-*" not in result
+        assert host_patterns(result).count("cloudx-dev-*") == 1
+        assert "cloudx-Dev-*" not in result
         assert "Host cloudx-dev-web2" in result
 
     def test_add_host_entry_normalises_case_on_its_own(self, setup):
@@ -221,7 +230,7 @@ class TestEnvironmentNameCase:
         assert setup._add_host_entry("DEV", "i-00000000", "web2", config) is True
 
         result = setup.ssh_config_file.read_text()
-        assert host_names(result).count("Host cloudx-dev-*") == 1
+        assert host_patterns(result).count("cloudx-dev-*") == 1
         assert "Host cloudx-dev-web2" in result
 
     def test_resolve_keeps_new_environment_untouched(self, setup):
@@ -468,3 +477,443 @@ class TestStripGeneratedBanners:
         lines = ["# one", "# two", "# three"]
 
         assert setup._strip_generated_banners(lines) == lines
+
+
+class TestManagedHostLinesShareOnePrefixCase:
+    """ssh matches Host patterns case-sensitively.
+
+    Blocks are recognised as ours case-insensitively, so a config carrying a
+    stale `Host cloudx-*` from an older release was written back unchanged and
+    then never matched `cloudX-dev-web1`. The generic block's `IdentitiesOnly
+    yes` and `User ec2-user` silently stopped applying, so ssh offered every
+    key in the agent and hit the server's MaxAuthTries before reaching the one
+    just pushed - surfacing as "Too many authentication failures" on a
+    connection that was otherwise healthy.
+    """
+
+    MIXED_CASE = """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudx-*
+    User ec2-user
+    TCPKeepAlive yes
+    IdentitiesOnly yes
+
+Host cloudX-DTA-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile cloudx
+
+Host cloudX-DTA-unified
+    HostName i-095f07267c26a685c
+"""
+
+    def uppercase_setup(self, tmp_path):
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True, exist_ok=True)
+        (ssh_dir / "config").write_text(self.MIXED_CASE)
+        return CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudX", non_interactive=True
+        )
+
+    def managed_host_lines(self, setup):
+        return [
+            line for line in setup.ssh_config_file.read_text().splitlines()
+            if line.startswith("Host ")
+        ]
+
+    def test_adding_a_host_normalises_the_stale_generic_block(self, tmp_path):
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        lines = self.managed_host_lines(setup)
+        assert "Host cloudX-* cloudx-*" in lines
+        assert "Host cloudx-*" not in lines
+
+    def test_cleanup_normalises_it_too(self, tmp_path):
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.cleanup_config()
+
+        lines = self.managed_host_lines(setup)
+        assert "Host cloudX-* cloudx-*" in lines
+        assert "Host cloudx-*" not in lines
+
+    def test_every_managed_host_line_leads_with_one_case(self, tmp_path):
+        """The invariant: a written file never disagrees with itself.
+
+        Wildcard blocks additionally answer to the other spelling, so that a
+        host entry left behind in the other case still picks them up - but the
+        canonical pattern always comes first and always uses the configured
+        case.
+        """
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        for line in self.managed_host_lines(setup):
+            assert line.startswith("Host cloudX-"), f"inconsistent prefix case: {line!r}"
+
+    def test_the_generic_block_keeps_its_directives(self, tmp_path):
+        """Normalising the header must not disturb what the block contains."""
+        setup = self.uppercase_setup(tmp_path)
+
+        setup.setup_ssh_config("DTA", "i-0123456789abcdef0", "web2")
+
+        result = setup.ssh_config_file.read_text()
+        for directive in ("User ec2-user", "TCPKeepAlive yes", "IdentitiesOnly yes"):
+            assert directive in result
+
+    def test_lowercase_invocation_normalises_the_other_way(self, tmp_path):
+        ssh_dir = tmp_path / "cloudx"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text("""Host cloudX-*
+    User ec2-user
+    IdentitiesOnly yes
+
+Host cloudx-dev-*
+    ProxyCommand uvx cloudx-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix="cloudx", non_interactive=True
+        )
+
+        setup.cleanup_config()
+
+        for line in self.managed_host_lines(setup):
+            assert line.startswith("Host cloudx-"), f"inconsistent prefix case: {line!r}"
+
+
+class TestNormalizeManagedHostLine:
+    """The wildcard blocks answer to both spellings; entries are left alone."""
+
+    def test_a_wildcard_block_gains_the_other_spelling(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-*"
+        ) == "Host cloudx-dev-* cloudX-dev-*"
+
+    def test_the_widened_form_is_idempotent(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudx-dev-* cloudX-dev-*"
+        ) == "Host cloudx-dev-* cloudX-dev-*"
+
+    def test_a_host_entry_keeps_the_case_its_owner_gave_it(self, setup):
+        """cloudX is the product name, but naming an instance cloudx-dev-web1
+        is the user's call - and the widened blocks above match it either way."""
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-web1"
+        ) == "Host cloudX-dev-web1"
+        assert setup._normalize_managed_host_line(
+            "Host cloudx-dev-web1"
+        ) == "Host cloudx-dev-web1"
+
+    def test_inline_comment_survives(self, setup):
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-*  # erik's env"
+        ) == "Host cloudx-dev-* cloudX-dev-*  # erik's env"
+
+    def test_only_the_prefix_is_touched(self, setup):
+        """A pattern whose own body contains the prefix spelling is not rewritten."""
+        assert setup._normalize_managed_host_line(
+            "Host cloudX-dev-cloudX-*"
+        ) == "Host cloudx-dev-cloudX-* cloudX-dev-cloudX-*"
+
+    def test_a_non_host_line_is_untouched(self, setup):
+        assert setup._normalize_managed_host_line("    User ec2-user") == "    User ec2-user"
+
+
+class TestCleanupKeepsProxyCommandFlags:
+    """cleanup rebuilt the ProxyCommand and silently deleted flags.
+
+    The rebuild drops flags that merely restate an auto-detected default, but
+    it recomputes those defaults from the running process rather than from the
+    line it is rewriting. An explicit `--profile cloudx` was therefore removed
+    because the default detected here is `cloudX`; AWS profile names are
+    case-sensitive, so the next connection died with "The config profile
+    (cloudX) could not be found". `--region` was dropped outright, since the
+    rebuild has no notion of it at all.
+    """
+
+    def cleaned(self, tmp_path, proxy_command):
+        home = tmp_path / "home"
+        ssh_dir = home / ".ssh" / "cloudX"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text(f"""Host cloudX-*
+    User ec2-user
+
+Host cloudX-dev-*
+    ProxyCommand {proxy_command}
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_config=str(ssh_dir / "config"), ssh_host_prefix="cloudX",
+            non_interactive=True,
+        )
+        setup.home_dir = str(home)
+        assert setup.cleanup_config() is True
+        for line in setup.ssh_config_file.read_text().splitlines():
+            if line.strip().startswith("ProxyCommand"):
+                return line.strip()
+        raise AssertionError("ProxyCommand disappeared entirely")
+
+    def test_an_explicit_profile_is_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --profile cloudx"
+        )
+        assert "--profile cloudx" in result
+
+    def test_an_explicit_ssh_key_is_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --ssh-key mykey"
+        )
+        assert "--ssh-key mykey" in result
+
+    def test_region_is_kept(self, tmp_path):
+        """The rebuild never emits --region, so it used to vanish."""
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --region eu-central-1"
+        )
+        assert "--region eu-central-1" in result
+
+    def test_aws_env_is_still_kept(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --aws-env prod"
+        )
+        assert "--aws-env prod" in result
+
+    def test_several_flags_all_survive(self, tmp_path):
+        result = self.cleaned(
+            tmp_path,
+            "uvx cloudX-proxy connect %h %p --profile acme --ssh-key mykey "
+            "--region eu-central-1 --aws-env prod",
+        )
+        for flag in ("--profile acme", "--ssh-key mykey",
+                     "--region eu-central-1", "--aws-env prod"):
+            assert flag in result, f"{flag} was dropped"
+
+    def test_no_flag_is_duplicated(self, tmp_path):
+        result = self.cleaned(
+            tmp_path, "uvx cloudX-proxy connect %h %p --aws-env prod"
+        )
+        assert result.count("--aws-env") == 1
+
+    def test_a_bare_command_stays_bare(self, tmp_path):
+        """Nothing to preserve means nothing is invented."""
+        result = self.cleaned(tmp_path, "uvx cloudX-proxy connect %h %p")
+        assert result == "ProxyCommand uvx cloudX-proxy connect %h %p"
+
+    def test_repeated_cleanup_is_stable(self, tmp_path):
+        home = tmp_path / "home"
+        ssh_dir = home / ".ssh" / "cloudX"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "config").write_text("""Host cloudX-*
+    User ec2-user
+
+Host cloudX-dev-*
+    ProxyCommand uvx cloudX-proxy connect %h %p --profile cloudx --region eu-west-3
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+        setup = CloudXSetup(
+            ssh_config=str(ssh_dir / "config"), ssh_host_prefix="cloudX",
+            non_interactive=True,
+        )
+        setup.home_dir = str(home)
+
+        setup.cleanup_config()
+        once = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+
+        assert setup.ssh_config_file.read_text() == once
+        assert once.count("--profile cloudx") == 1
+
+
+class TestBothPrefixSpellingsMatch:
+    """A config may spell the prefix either way, in the same file.
+
+    ssh matches Host patterns case-sensitively and its pattern syntax has only
+    '*' and '?' - `cloud[xX]-*` is a literal hostname, not a character class -
+    so one spelling in a wildcard block cannot cover the other. Wildcard blocks
+    therefore list every spelling; a Host line matches if any of its patterns
+    does.
+    """
+
+    MIXED = """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudx-*
+    User ec2-user
+    IdentitiesOnly yes
+
+Host cloudX-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host cloudx-dev-web1
+    HostName i-0123456789abcdef0
+"""
+
+    def make(self, tmp_path, content, prefix="cloudX"):
+        ssh_dir = tmp_path / "cloudX"
+        ssh_dir.mkdir(parents=True, exist_ok=True)
+        (ssh_dir / "config").write_text(content)
+        return CloudXSetup(
+            ssh_dir=str(ssh_dir), ssh_host_prefix=prefix, non_interactive=True
+        )
+
+    def test_wildcard_blocks_list_both_spellings(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+
+        lines = host_names(setup.ssh_config_file.read_text())
+        assert "Host cloudX-* cloudx-*" in lines
+        assert "Host cloudX-dev-* cloudx-dev-*" in lines
+
+    def test_host_entries_keep_the_name_their_owner_gave_them(self, tmp_path):
+        """They are what the user types, what `list` reports and what VSCode
+        offers - and `cloudx-dev-web1` is a legitimate thing to call a box."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+
+        entries = [
+            line for line in host_names(setup.ssh_config_file.read_text())
+            if "*" not in line
+        ]
+        assert entries == ["Host cloudx-dev-web1"]
+
+    def test_a_lowercase_entry_still_resolves_its_settings(self, tmp_path):
+        """The point of widening: the entry keeps its name and still inherits."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudx-dev-web1" in result
+        assert "Host cloudX-dev-* cloudx-dev-*" in result
+
+    def test_converting_the_command_name_does_not_rename_instances(self, tmp_path):
+        """cleanup run as cloudX-proxy converts the patterns, not the boxes."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.cleanup_config()
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudx-dev-web1" in result
+        assert "Host cloudX-dev-web1" not in result
+
+    def test_reregistering_a_host_keeps_its_name(self, tmp_path):
+        """Only the instance id is being updated - not what the box is called."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web1")
+        result = setup.ssh_config_file.read_text()
+
+        entries = [line for line in host_names(result) if "*" not in line]
+        assert entries == ["Host cloudx-dev-web1"]
+        assert "HostName i-9999999999999999" in result
+        assert "HostName i-0123456789abcdef0" not in result
+
+    def test_the_connect_hint_names_the_entry_that_was_written(self, tmp_path, capsys):
+        """Telling someone to `ssh cloudX-dev-web1` when the entry says
+        cloudx-dev-web1 sends them to a host that does not resolve."""
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web1")
+
+        assert "ssh cloudx-dev-web1" in capsys.readouterr().out
+
+    def test_a_brand_new_host_uses_the_configured_case(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudX")
+
+        setup.setup_ssh_config("dev", "i-9999999999999999", "web9")
+        result = setup.ssh_config_file.read_text()
+
+        assert "Host cloudX-dev-web9" in result
+
+    def test_a_lowercase_config_answers_to_the_uppercase_prefix_too(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED, prefix="cloudx")
+
+        setup.cleanup_config()
+
+        lines = host_names(setup.ssh_config_file.read_text())
+        assert "Host cloudx-* cloudX-*" in lines
+        assert "Host cloudx-dev-* cloudX-dev-*" in lines
+
+    def test_the_widened_form_round_trips(self, tmp_path):
+        """Our own output must be recognised as ours, or a second rewrite would
+        file the block under 'not managed' and generate a duplicate."""
+        setup = self.make(tmp_path, self.MIXED)
+
+        setup.cleanup_config()
+        once = setup.ssh_config_file.read_text()
+        setup.cleanup_config()
+        twice = setup.ssh_config_file.read_text()
+
+        assert twice == once
+        assert "NOT MANAGED" not in twice
+        assert host_patterns(twice).count("cloudX-*") == 1
+
+    def test_a_users_multi_host_line_stays_theirs(self, tmp_path):
+        """Patterns that differ by more than case name different hosts."""
+        setup = self.make(tmp_path, self.MIXED + """
+Host buildbox releasebox
+    User jenkins
+""")
+
+        setup.cleanup_config()
+
+        result = setup.ssh_config_file.read_text()
+        assert "NOT MANAGED" in result
+        assert "Host buildbox releasebox" in result
+        assert "    User jenkins" in result
+
+    def test_a_hand_written_both_case_block_is_recognised(self, tmp_path):
+        """The form users write themselves to work around the case problem."""
+        setup = self.make(tmp_path, """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host cloudX-dev-* cloudx-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host cloudX-dev-web1
+    HostName i-0123456789abcdef0
+""")
+
+        parsed = setup._parse_ssh_config(setup.ssh_config_file.read_text())
+
+        assert parsed["other"] == []
+        assert "dev" in parsed["environments"]
+
+    def test_an_unrelated_prefix_gains_no_spellings(self, tmp_path):
+        setup = self.make(tmp_path, """# SSH Configuration - Managed by cloudx-proxy v0.16.15
+
+Host vscode-*
+    User ec2-user
+
+Host vscode-dev-*
+    IdentityFile ~/.ssh/cloudX/cloudX
+    ProxyCommand uvx cloudX-proxy connect %h %p
+
+Host vscode-dev-web1
+    HostName i-0123456789abcdef0
+""", prefix="vscode")
+
+        setup.cleanup_config()
+
+        for line in host_names(setup.ssh_config_file.read_text()):
+            assert len(line.split()) == 2, f"invented a spelling: {line!r}"
+
+    def test_variants_only_vary_the_prefix(self, tmp_path):
+        setup = self.make(tmp_path, self.MIXED)
+
+        assert setup._host_pattern_variants("cloudX-Pre-Prod-*") == [
+            "cloudX-Pre-Prod-*",
+            "cloudx-Pre-Prod-*",
+        ]
+        assert setup._host_pattern_variants("unrelated-*") == ["unrelated-*"]
