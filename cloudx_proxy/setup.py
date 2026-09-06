@@ -2158,8 +2158,12 @@ class CloudXSetup:
 
         if self.dry_run:
             self.print_status("[DRY RUN] Would set up SSH configuration with three-tier approach")
-            self.print_status(f"[DRY RUN] Would create generic pattern: {self.ssh_host_prefix}-*", None, 2)
-            self.print_status(f"[DRY RUN] Would create environment pattern: {self.ssh_host_prefix}-{cloudx_env}-*", None, 2)
+            # Preview the patterns as they will be written, both spellings and
+            # all: a dry run is how someone checks what is about to happen.
+            generic = self._host_line_value(f"{self.ssh_host_prefix}-*")
+            environment = self._host_line_value(f"{self.ssh_host_prefix}-{cloudx_env}-*")
+            self.print_status(f"[DRY RUN] Would create generic pattern: {generic}", None, 2)
+            self.print_status(f"[DRY RUN] Would create environment pattern: {environment}", None, 2)
             self.print_status(f"[DRY RUN] Would create host entry: {self.ssh_host_prefix}-{cloudx_env}-{hostname} -> {instance_id}", None, 2)
             self.print_status(f"[DRY RUN] Would write configuration to: {self.ssh_config_file}", None, 2)
             return True

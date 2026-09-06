@@ -378,3 +378,41 @@ class TestPrefixFromCommandName:
         ):
             monkeypatch.setattr("cloudx_proxy.cli.sys.argv", [argv0])
             assert prefix_from_command_name() == expected, argv0
+
+
+class TestDryRunPreviewsWhatIsWritten:
+    """A dry run is how you check what is about to happen to your config.
+
+    It previewed `cloudX-*` while the write produces `cloudX-* cloudx-*`, so
+    the one command meant for looking before you leap did not show the change
+    this release actually makes.
+    """
+
+    def preview(self, tmp_path, monkeypatch, argv0="cloudX-proxy"):
+        monkeypatch.setattr("cloudx_proxy.setup.boto3.Session", lambda *a, **k: None)
+        monkeypatch.setattr("cloudx_proxy.cli.sys.argv", [argv0])
+
+        result = CliRunner().invoke(cli, [
+            "setup", "--dry-run", "--yes",
+            "--instance", "i-0123456789abcdef0",
+            "--hostname", "test", "--environment", "dev",
+            "--ssh-config", str(tmp_path / "cloudX" / "config"),
+        ])
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    def test_patterns_show_both_spellings(self, tmp_path, monkeypatch):
+        output = self.preview(tmp_path, monkeypatch)
+
+        assert "Would create generic pattern: cloudX-* cloudx-*" in output
+        assert "Would create environment pattern: cloudX-dev-* cloudx-dev-*" in output
+
+    def test_the_host_entry_stays_a_single_name(self, tmp_path, monkeypatch):
+        output = self.preview(tmp_path, monkeypatch)
+
+        assert "Would create host entry: cloudX-dev-test -> i-0123456789abcdef0" in output
+
+    def test_the_other_command_name_leads_with_its_own(self, tmp_path, monkeypatch):
+        output = self.preview(tmp_path, monkeypatch, argv0="cloudx-proxy")
+
+        assert "Would create generic pattern: cloudx-* cloudX-*" in output
