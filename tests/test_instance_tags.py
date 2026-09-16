@@ -94,7 +94,7 @@ class TestEnvironmentPrecedence:
         assert hostname == "erik"
         out = capsys.readouterr().out
         assert "FOO" in out and "BAR" in out
-        assert "✗" in out
+        assert "✗" not in out, "a resolved conflict is a warning, not a failure"
 
     def test_agreement_is_not_flagged(self, setup, monkeypatch, capsys):
         environment, hostname = get_tags(

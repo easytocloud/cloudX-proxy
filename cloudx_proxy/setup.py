@@ -208,9 +208,11 @@ class CloudXSetup:
             )
             if env_from_name and env_from_tag and env_from_name != env_from_tag:
                 self.print_status(
-                    f"Name tag implies environment '{env_from_name}' but the environment tag says "
-                    f"'{env_from_tag}' - using '{env_from_tag}'",
-                    False, 2
+                    warning(
+                        f"Name tag implies environment '{env_from_name}' but the environment tag says "
+                        f"'{env_from_tag}' - using '{env_from_tag}'"
+                    ),
+                    None, 2
                 )
 
             environment = env_from_tag or env_from_name
