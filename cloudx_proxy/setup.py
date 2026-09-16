@@ -135,8 +135,12 @@ class CloudXSetup:
         """Fetch instance tags and extract environment and hostname.
 
         Queries EC2 for the instance tags and extracts:
-        - Environment by priority: {env} from Name tag > cloudX:environment tag > Environment tag
-        - Hostname from the 'Name' tag (expects format: cloudX-{env}-{hostname} | {username})
+        - Hostname from the 'Name' tag: legacy cloudX-{env}-{hostname} (optionally
+          " | {username}") format if present, otherwise Name is used as-is (current
+          cloudX-instance.yaml sets Name to the plain hostname with no prefix).
+        - Environment from the cloudX:environment/cloudx:environment/Environment tag,
+          preferred over {env} parsed from a legacy Name tag. A mismatch between the
+          two is logged as a warning; the tag always wins.
 
         Args:
             instance_id: The EC2 instance ID
@@ -173,8 +177,12 @@ class CloudXSetup:
             instance = response['Reservations'][0]['Instances'][0]
             tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
 
-            # Extract hostname and env from Name tag
-            # Format: cloudX-{env}-{hostname} | {username}
+            # Hostname comes from the Name tag. Older cloudX-instance.yaml versions
+            # prefixed it as cloudX-{env}-{hostname} (optionally " | {username}");
+            # current versions set Name to the plain hostname with no prefix. Try the
+            # legacy pattern first for backward compatibility, and fall back to using
+            # Name as-is - either way we get a hostname straight from the tag, so this
+            # is never itself a reason to flag anything.
             hostname = None
             env_from_name = None
             name_tag = tags.get('Name', '')
@@ -184,20 +192,30 @@ class CloudXSetup:
                 if match:
                     env_from_name = match.group(1)
                     hostname = match.group(2)
-                    self.print_status(f"Found hostname from Name tag: {hostname}", True, 2)
                 else:
-                    self.print_status(f"Name tag '{name_tag}' does not match cloudX-{{env}}-{{hostname}} format", None, 2)
+                    hostname = ssh_hostname
+                if hostname:
+                    self.print_status(f"Found hostname from Name tag: {hostname}", True, 2)
 
-            # Determine environment by priority:
-            # 1. {env} from Name tag
-            # 2. cloudX:environment or cloudx:environment tag
-            # 3. Environment tag
-            environment = (
-                env_from_name
-                or tags.get('cloudX:environment')
+            # Environment: prefer the explicit tag over one parsed from a legacy Name
+            # tag, since the tag is the current, authoritative source. Only speak up
+            # if the two genuinely disagree - that's a real inconsistency worth a
+            # human's attention, not the routine case.
+            env_from_tag = (
+                tags.get('cloudX:environment')
                 or tags.get('cloudx:environment')
                 or tags.get('Environment')
             )
+            if env_from_name and env_from_tag and env_from_name != env_from_tag:
+                self.print_status(
+                    warning(
+                        f"Name tag implies environment '{env_from_name}' but the environment tag says "
+                        f"'{env_from_tag}' - using '{env_from_tag}'"
+                    ),
+                    None, 2
+                )
+
+            environment = env_from_tag or env_from_name
             if environment:
                 self.print_status(f"Found environment: {environment}", True, 2)
 
