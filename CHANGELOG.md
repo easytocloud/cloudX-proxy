@@ -1,3 +1,11 @@
+## [0.17.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.5...v0.17.6) (2026-09-16)
+
+
+### Bug Fixes
+
+* resolve hostname/environment from plain Name tag, not just legacy prefix ([8f157a5](https://github.com/easytocloud/cloudX-proxy/commit/8f157a587a24c1cbb587162fc4e11ed8945b0715))
+* use warning styling, not the failure symbol, for env tag conflicts ([7866ddc](https://github.com/easytocloud/cloudX-proxy/commit/7866ddcd35248d1124c66491f5d8ce7b6b489ba3))
+
 ## [0.17.5](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.4...v0.17.5) (2026-09-10)
 
 ## [0.17.4](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.3...v0.17.4) (2026-09-06)
