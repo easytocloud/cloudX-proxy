@@ -1,3 +1,10 @@
+## [0.17.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.6...v0.17.7) (2026-10-28)
+
+
+### Bug Fixes
+
+* bump locked deps to patch urllib3, certifi, filelock, msgpack vulnerabilities ([eeda394](https://github.com/easytocloud/cloudX-proxy/commit/eeda394103919a39b4732330f0f7cdcf7da8c612))
+
 ## [0.17.6](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.5...v0.17.6) (2026-09-16)
 
 
