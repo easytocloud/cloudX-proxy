@@ -28,7 +28,7 @@ Using AWS Systems Manager Session Manager, it eliminates the need for direct SSH
 
 1. **Install Prerequisites:**
    ```bash
-   # Install Python 3.10+, AWS CLI v2, Session Manager plugin
+   # Install Python 3.11+, AWS CLI v2, Session Manager plugin
    pip install uv
    ```
 
@@ -68,10 +68,10 @@ All documentation and examples use this convention. If you see different casing 
 
 ## Prerequisites
 
-1. **Python 3.10+** - Required for cloudX-proxy and uv package manager
+1. **Python 3.11+** - Required for cloudX-proxy and uv package manager
    - [Python Installation Guide](https://www.python.org/downloads/)
    - Check your version: `python --version` or `python3 --version`
-   - Supports Python 3.10, 3.11, 3.12, 3.13
+   - Supports Python 3.11, 3.12, 3.13
 
 2. **AWS CLI v2** - Used to configure AWS profiles and credentials
    - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
@@ -668,7 +668,7 @@ These permissions are required to bootstrap the instance, so that after creation
 ### Common Issues
 
 1. **Python/Installation Issues**
-   - **Error: "python not found"** - Ensure Python 3.10+ is installed and in PATH
+   - **Error: "python not found"** - Ensure Python 3.11+ is installed and in PATH
    - **Error: "uvx command not found"** - Install uv: `pip install uv`
    - **Error: "Package not found"** - Try updating uv: `pip install --upgrade uv`
    - **ImportError/ModuleNotFoundError** - Check Python version compatibility (`python --version`)
