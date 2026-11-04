@@ -75,4 +75,6 @@ The project uses semantic-release with GitHub Actions:
 
 Commit message format affects version bumps:
 - `feat:` → minor version
-- `fix:`, `docs:`, `style:`, etc. → patch version
+- `fix:`, `perf:`, `refactor:` → patch version
+- `docs:`, `style:`, `test:`, `build:`, `ci:`, `chore:` → no release; they ride along in the next release's changelog
+- Dependabot: runtime dependency updates are `fix(deps)` (release), dev-only dependency updates and GitHub Actions updates are `chore(deps-dev)` / `ci(deps)` (no release)
