@@ -22,3 +22,10 @@ updates:
       prefix: "fix"
       prefix-development: "chore"
       include: "scope"
+    # One PR per group instead of one per package: every bump rewrites uv.lock,
+    # so separate PRs conflict with each other and each needs a rebase + CI run.
+    groups:
+      runtime:
+        dependency-type: "production"
+      dev:
+        dependency-type: "development"
