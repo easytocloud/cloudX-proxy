@@ -1,3 +1,10 @@
+# [0.18.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.7...v0.18.0) (2026-11-04)
+
+
+### Features
+
+* require Python 3.11+ (3.10 is end of life) ([9577577](https://github.com/easytocloud/cloudX-proxy/commit/9577577bc6c3996d6e7c4e8859fc12642f71f8ee))
+
 ## [0.17.7](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.6...v0.17.7) (2026-10-28)
 
 
