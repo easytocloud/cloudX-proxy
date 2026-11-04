@@ -1,12 +1,24 @@
 version: 2
 updates:
 
+  # Workflow action bumps never change what ships to PyPI, so they must not
+  # trigger a release (ci -> no release in .releaserc).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
 
-  - package-ecosystem: "pip"
+  # Runtime dependency bumps (and security fixes) change what users install,
+  # so they release as a patch. Dev-only groups (pytest, ruff, pip-audit, ...)
+  # do not. The project is locked with uv.lock, hence the uv ecosystem.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "daily"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"

@@ -74,5 +74,8 @@ The project uses semantic-release with GitHub Actions:
 - **Artifacts**: GitHub releases, PyPI packages, CHANGELOG.md updates
 
 Commit message format affects version bumps:
+- `type!:` or a `BREAKING CHANGE:` footer on any type → major version (note: from 0.x this becomes 1.0.0)
 - `feat:` → minor version
-- `fix:`, `docs:`, `style:`, etc. → patch version
+- `fix:`, `perf:`, `refactor:` → patch version
+- `docs:`, `style:`, `test:`, `build:`, `ci:`, `chore:` → no release; they ride along in the next release's changelog
+- Dependabot: runtime dependency updates are `fix(deps)` (release), dev-only dependency updates and GitHub Actions updates are `chore(deps-dev)` / `ci(deps)` (no release)
