@@ -101,6 +101,7 @@ The project uses semantic-release with GitHub Actions:
 - **Artifacts**: GitHub releases, PyPI packages, CHANGELOG.md updates.
 
 **Commit Message Format:**
+- `type!:` or a `BREAKING CHANGE:` footer on any type → major version (note: from 0.x this becomes 1.0.0)
 - `feat:` → minor version
 - `fix:`, `perf:`, `refactor:` → patch version
 - `docs:`, `style:`, `test:`, `build:`, `ci:`, `chore:` → no release; they ride along in the next release's changelog

@@ -49,7 +49,9 @@ The package is automatically published to PyPI via GitHub Actions when a new rel
 The project uses semantic-release for versioning. 
 Version numbers are automatically determined based on commit messages following the conventional commits specification.
 
-Only `feat` (minor) and `fix`, `perf`, `refactor` (patch) publish a release.
+A breaking change (`feat!: ...`, or a `BREAKING CHANGE:` footer on any commit
+type) publishes a major release; from 0.x that means 1.0.0. Otherwise only `feat`
+(minor) and `fix`, `perf`, `refactor` (patch) publish a release.
 `docs`, `style`, `test`, `build`, `ci` and `chore` commits never do on their own;
 they are included in the changelog of the next release. To ship accumulated
 chore-type changes, land a `fix:` commit. Dependabot runtime dependency updates
