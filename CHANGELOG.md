@@ -1,3 +1,10 @@
+## [0.18.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.18.0...v0.18.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **deps:** bump boto3, click, ruff, pytest, pip-audit; group Dependabot PRs ([7ebc458](https://github.com/easytocloud/cloudX-proxy/commit/7ebc458fe571dbe233b370a7c9808da745da0133)), closes [82-#86](https://github.com/82-/issues/86)
+
 # [0.18.0](https://github.com/easytocloud/cloudX-proxy/compare/v0.17.7...v0.18.0) (2026-11-04)
 
 
