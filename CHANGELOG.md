@@ -1,3 +1,9 @@
+## [0.18.2](https://github.com/easytocloud/cloudX-proxy/compare/v0.18.1...v0.18.2) (2026-11-18)
+
+### Bug Fixes
+
+* **deps:** bump the runtime group across 1 directory with 2 updates ([5b381e7](https://github.com/easytocloud/cloudX-proxy/commit/5b381e7b4e9556f0e29da4bc647dd4ae3c32acbd))
+
 ## [0.18.1](https://github.com/easytocloud/cloudX-proxy/compare/v0.18.0...v0.18.1) (2026-11-04)
 
 
